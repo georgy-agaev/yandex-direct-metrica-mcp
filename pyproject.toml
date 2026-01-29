@@ -1,6 +1,6 @@
 [project]
 name = "yandex-direct-metrica-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server for Yandex Direct + Metrica (read-only, raw exports)"
 readme = "README.md"
 requires-python = ">=3.10"

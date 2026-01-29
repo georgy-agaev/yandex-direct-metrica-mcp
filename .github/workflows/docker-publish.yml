@@ -38,20 +38,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to Docker Hub (optional)
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: |
             ${{ matrix.edition == 'public' && env.GHCR_IMAGE_PUBLIC || env.GHCR_IMAGE_PRO }}
-            ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' && (matrix.edition == 'public' && format('docker.io/{0}/{1}', secrets.DOCKERHUB_USERNAME, env.IMAGE_NAME_PUBLIC) || format('docker.io/{0}/{1}', secrets.DOCKERHUB_USERNAME, env.IMAGE_NAME_PRO)) || '' }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag

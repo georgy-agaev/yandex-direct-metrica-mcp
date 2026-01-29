@@ -71,13 +71,11 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```
 
 ## 3) Docker Hub (опционально)
-Если хотите пушить также в Docker Hub, добавьте secrets в GitHub repo:
+Если хотите пушить также в Docker Hub, добавьте secrets в GitHub repo и расширьте workflow:
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
 
-После этого workflow будет пушить также в:
-- `docker.io/<DOCKERHUB_USERNAME>/yandex-direct-metrica-mcp:<tag>`
-- `docker.io/<DOCKERHUB_USERNAME>/yandex-direct-metrica-mcp-pro:<tag>`
+Примечание: текущий workflow пушит только в GHCR (для надёжности релиза v0.1.x). Docker Hub можно добавить отдельным шагом/джобой позже.
 
 ## 4) Как подключить образ к Claude Code
 

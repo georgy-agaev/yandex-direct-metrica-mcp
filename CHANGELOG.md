@@ -4,6 +4,7 @@ All notable changes to this MCP project will be documented in this file.
 
 ## Unreleased
 - Bumped version to `0.1.1` and fixed CI install by adding `project.optional-dependencies.dev` (so `pip install -e ".[dev]"` works).
+- Docker publish workflow: removed optional Docker Hub image target from metadata generation to avoid failures when Docker Hub secrets are not configured.
 - Refreshed user-facing docs: rewrote `README.md`, added `docs/quickstart.md`, `docs/public-vs-pro.md`, `docs/dashboard-option1.md`, a simple landing page `docs/index.html`, and prompt examples in `examples/claude-code-prompts.md`.
 - `README.md`: added a tools/layers overview (raw vs human-friendly), added a CLI commands list, and moved legal/compliance sections to the end.
 - Added Apache-2.0 `LICENSE` and an explicit affiliation/trademark disclaimer + “Compliance / Terms” section in `README.md`.
