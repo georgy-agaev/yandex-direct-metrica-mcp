@@ -1,0 +1,9 @@
+{
+  "UnifiedCampaign": {
+    "BiddingStrategy": {
+      "Search": { "BiddingStrategyType": "HIGHEST_POSITION" },
+      "Network": { "BiddingStrategyType": "HIGHEST_POSITION" }
+    }
+  }
+}
+

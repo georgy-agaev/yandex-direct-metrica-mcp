@@ -1,0 +1,12 @@
+{
+  "resource": "campaigns",
+  "method": "get",
+  "params": {
+    "SelectionCriteria": {
+      "Ids": [706377468]
+    },
+    "FieldNames": ["Id", "Name", "Type", "State", "Status", "StartDate", "EndDate", "NegativeKeywords"],
+    "UnifiedCampaignFieldNames": ["BiddingStrategy"]
+  }
+}
+

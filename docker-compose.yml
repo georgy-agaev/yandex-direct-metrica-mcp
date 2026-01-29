@@ -1,0 +1,14 @@
+services:
+  yandex-direct-metrica-mcp:
+    build: .
+    env_file:
+      - ./.env
+    environment:
+      - MCP_ACCOUNTS_FILE=/data/accounts.json
+      - MCP_ACCOUNTS_WRITE_ENABLED=true
+    volumes:
+      - ./state:/data:ro
+      - ./state/accounts.json:/data/accounts.json:rw
+    command: ["yandex-direct-metrica-mcp", "--transport", "sse", "--port", "8000"]
+    ports:
+      - "8000:8000"

@@ -1,0 +1,1971 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BI Dashboard | Yandex Direct + Metrica</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --primary: #0b1020;
+      --secondary: #111a33;
+      --accent: #0f3460;
+      --highlight: #7aa2ff;
+      --success: #00d26a;
+      --warning: #ffc107;
+      --danger: #fb7185;
+      --light: #f8f9fa;
+      --text-primary: #eaf0ff;
+      --text-secondary: rgba(234,240,255,.72);
+      --text-muted: rgba(234,240,255,.55);
+      --card-bg: rgba(255,255,255,.04);
+      --card-border: rgba(255,255,255,.10);
+      --grid-color: rgba(255,255,255,.08);
+      --shadow: 0 12px 30px rgba(0,0,0,.22);
+    }
+
+    [data-theme="light"] {
+      --primary: #f6f7fb;
+      --secondary: #ffffff;
+      --accent: #e9efff;
+      --text-primary: #111827;
+      --text-secondary: rgba(17,24,39,.70);
+      --text-muted: rgba(17,24,39,.55);
+      --card-bg: rgba(255,255,255,.9);
+      --card-border: rgba(17,24,39,.10);
+      --grid-color: rgba(17,24,39,.10);
+      --shadow: 0 10px 26px rgba(17,24,39,.10);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, system-ui, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 20% 0%, #17214a 0%, var(--primary) 55%, #070a14 100%);
+      color: var(--text-primary);
+    }
+    [data-theme="light"] body {
+      background: radial-gradient(1200px 800px at 20% 0%, #e9efff 0%, var(--primary) 55%, #f6f7fb 100%);
+    }
+
+    .container { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { display: flex; gap: 14px; justify-content: space-between; align-items: flex-end; }
+    h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+    .sub { margin-top: 6px; color: var(--text-secondary); font-size: 13px; }
+    .meta { text-align: right; font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .toolbar { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; margin-top: 14px; }
+    .toolbar-left { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; min-width: 0; }
+    .toolbar-right { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+    .group { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--card-bg); border: 1px solid var(--card-border); box-shadow: var(--shadow); }
+    .group h3 { margin: 0 10px 0 0; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+    .btn { padding: 9px 14px; border-radius: 10px; border: 1px solid var(--card-border); background: rgba(0,0,0,.12); color: var(--text-primary); cursor: pointer; transition: transform .15s ease, background .15s ease; font-size: 13px; }
+    [data-theme="light"] .btn { background: rgba(17,24,39,.04); }
+    .btn:hover { transform: translateY(-1px); background: rgba(122,162,255,.14); }
+    .btn.active { background: rgba(122,162,255,.22); border-color: rgba(122,162,255,.40); }
+    .btn.icon { padding: 9px 12px; }
+    .select { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--card-border); background: rgba(0,0,0,.12); color: var(--text-primary); outline: none; font-size: 13px; min-width: 220px; max-width: 320px; }
+    [data-theme="light"] .select { background: rgba(17,24,39,.04); }
+    @media (max-width: 980px) { .toolbar { grid-template-columns: 1fr; } .toolbar-right { justify-content: flex-start; flex-wrap: wrap; } .select { min-width: 180px; } }
+
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; margin-top: 12px; }
+    .card { background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border: 1px solid var(--card-border); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); }
+    .col-12 { grid-column: span 12; }
+    .col-8 { grid-column: span 8; }
+    .col-4 { grid-column: span 4; }
+    .title { margin: 0 0 10px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; font-weight: 700; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+    @media (max-width: 980px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .col-8, .col-4 { grid-column: span 12; } header { flex-direction: column; align-items: flex-start; } .meta { text-align: left; } }
+    .kpi { padding: 12px; border-radius: 12px; border: 1px solid var(--grid-color); background: rgba(0,0,0,.10); }
+    [data-theme="light"] .kpi { background: rgba(17,24,39,.03); }
+    .kpi-label { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .kpi-flag { font-size: 12px; color: var(--warning); min-width: 14px; text-align: right; }
+    .kpi-value { margin-top: 4px; font-size: 20px; font-weight: 800; }
+    .kpi-change { margin-top: 4px; font-size: 12px; color: var(--text-muted); }
+    .kpi-change.positive { color: var(--success); }
+    .kpi-change.negative { color: var(--danger); }
+    .kpi-change.neutral { color: var(--text-muted); }
+
+    .funnel-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .funnel-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width: 980px) { .funnel-grid { grid-template-columns: 1fr; } }
+    .funnel-step { padding: 12px; border-radius: 12px; border: 1px solid var(--grid-color); background: rgba(0,0,0,.10); }
+    [data-theme="light"] .funnel-step { background: rgba(17,24,39,.03); }
+    .funnel-step.bottleneck { border-color: rgba(255,193,7,.55); box-shadow: 0 0 0 1px rgba(255,193,7,.20) inset; }
+    .funnel-step.bottleneck .funnel-label::after { content: " · узкое место"; color: var(--warning); font-weight: 700; }
+    .funnel-label { font-size: 12px; color: var(--text-muted); }
+    .funnel-value { margin-top: 4px; font-size: 18px; font-weight: 800; }
+    .funnel-rate { margin-top: 4px; font-size: 12px; color: var(--text-secondary); }
+    .funnel-section-title { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+
+    .chart-wrap { height: 320px; position: relative; }
+    canvas { width: 100% !important; height: 100% !important; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--grid-color); vertical-align: middle; }
+    th { text-align: left; color: var(--text-secondary); font-weight: 700; }
+    .mini-chart { width: 120px; height: 34px; }
+    .comparison-badge { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--grid-color); color: var(--text-muted); font-size: 12px; }
+    .comparison-badge.up { color: var(--success); border-color: rgba(0,210,106,.35); }
+    .comparison-badge.down { color: var(--danger); border-color: rgba(251,113,133,.35); }
+
+    .campaign-name { display: flex; gap: 10px; align-items: center; }
+    .campaign-icon { width: 28px; height: 28px; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--grid-color); background: rgba(0,0,0,.10); }
+    .campaign-icon.search { color: #7aa2ff; }
+    .campaign-icon.rsya { color: #2dd4bf; }
+    .campaign-row { cursor: pointer; }
+    .campaign-row:hover { background: rgba(122,162,255,.08); }
+
+    .rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 980px) { .rec-grid { grid-template-columns: 1fr; } }
+    .rec-card { padding: 12px; border-radius: 12px; border: 1px solid var(--grid-color); background: rgba(0,0,0,.10); }
+    [data-theme="light"] .rec-card { background: rgba(17,24,39,.03); }
+    .rec-card h3 { margin: 0; font-size: 14px; }
+    .rec-card p { margin: 6px 0 0; color: var(--text-secondary); font-size: 12px; }
+    .rec-list { margin: 10px 0 0; padding-left: 18px; }
+    .rec-list li { margin: 6px 0; }
+    .note { color: var(--text-secondary); font-size: 12px; margin-top: 8px; }
+    .alert-card { display: none; }
+    .alert-list { margin: 0; padding-left: 18px; }
+    .alert-list li { margin: 6px 0; }
+    .alert-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--grid-color); font-size: 12px; color: var(--text-muted); }
+    .alert-badge.warn { color: var(--warning); border-color: rgba(255,193,7,.35); }
+    .alert-badge.danger { color: var(--danger); border-color: rgba(251,113,133,.35); }
+    .sources-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+    @media (max-width: 980px) { .sources-legend { grid-template-columns: 1fr; } }
+    .source-item { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--card-border); border-radius: 12px; background: rgba(0,0,0,.10); }
+    [data-theme="light"] .source-item { background: rgba(17,24,39,.03); }
+    .source-left { display: flex; gap: 10px; align-items: center; min-width: 0; }
+    .swatch { width: 10px; height: 10px; border-radius: 999px; flex: 0 0 auto; box-shadow: 0 0 0 2px rgba(0,0,0,.12); }
+    .source-label { font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .source-val { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); padding: 24px; }
+    .modal.show { display: block; }
+    .modal-panel { max-width: 1100px; margin: 0 auto; background: var(--secondary); border: 1px solid var(--card-border); border-radius: 14px; box-shadow: var(--shadow); padding: 14px; }
+    [data-theme="light"] .modal-panel { background: var(--secondary); }
+    .modal-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .modal-title { margin: 0; font-size: 16px; }
+    .modal-close { border: 1px solid var(--card-border); background: rgba(0,0,0,.12); color: var(--text-primary); border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+    [data-theme="light"] .modal-close { background: rgba(17,24,39,.04); }
+    .modal-body { margin-top: 12px; }
+    .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 980px) { .modal-grid { grid-template-columns: 1fr; } }
+    .small { font-size: 12px; color: var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1 id="pageTitle">BI Dashboard</h1>
+        <div class="sub">Данные: Direct + Метрика. Сравнение: vs предыдущий период той же длины.</div>
+      </div>
+      <div class="meta">
+        <div><span class="mono" id="accountMeta">—</span></div>
+        <div>Период: <span class="mono" id="periodMeta">—</span></div>
+        <div>Сравнение: <span class="mono" id="compareMeta">—</span></div>
+        <div>Generated: <span class="mono" id="generatedMeta">—</span></div>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <div class="group">
+          <h3>Период</h3>
+          <button class="btn period-btn active" data-period="custom">Custom</button>
+          <button class="btn period-btn" data-period="7d">7d</button>
+          <button class="btn period-btn" data-period="30d">30d</button>
+          <button class="btn period-btn" data-period="week">Week</button>
+          <button class="btn period-btn" data-period="month">Month</button>
+        </div>
+        <div class="group">
+          <h3>Сравнение</h3>
+          <button class="btn compare-btn active" data-compare="prev">Пред. период</button>
+          <button class="btn compare-btn" data-compare="none">Без сравнения</button>
+        </div>
+        <div class="group">
+          <h3>Кампании</h3>
+          <button class="btn filter-btn active" data-filter="all">Все</button>
+          <button class="btn filter-btn" data-filter="search">Поиск</button>
+          <button class="btn filter-btn" data-filter="rsya">РСЯ</button>
+          <button class="btn filter-btn" data-filter="unclassified">Не классифицировано</button>
+        </div>
+      </div>
+      <div class="toolbar-right">
+        <div class="group" id="accountGroup" style="display:none;">
+          <h3>Аккаунт</h3>
+          <select class="select" id="accountSelect"></select>
+        </div>
+        <div class="group">
+          <h3>Тема</h3>
+          <button class="btn icon" id="themeToggle" title="Toggle theme"><span id="themeIcon">🌙</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card col-12">
+        <div class="title">KPI</div>
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-label"><span>Показы</span><span class="kpi-flag" id="flag-impressions"></span></div>
+            <div class="kpi-value" id="kpi-impressions">—</div>
+            <div class="kpi-change neutral" id="kpi-impressions-change">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label"><span>Клики</span><span class="kpi-flag" id="flag-clicks"></span></div>
+            <div class="kpi-value" id="kpi-clicks">—</div>
+            <div class="kpi-change neutral" id="kpi-clicks-change">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label"><span>CTR</span><span class="kpi-flag" id="flag-ctr"></span></div>
+            <div class="kpi-value" id="kpi-ctr">—</div>
+            <div class="kpi-change neutral" id="kpi-ctr-change">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label"><span>Расход</span><span class="kpi-flag" id="flag-cost"></span></div>
+            <div class="kpi-value" id="kpi-cost">—</div>
+            <div class="kpi-change neutral" id="kpi-cost-change">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label"><span>CPC</span><span class="kpi-flag" id="flag-cpc"></span></div>
+            <div class="kpi-value" id="kpi-cpc">—</div>
+            <div class="kpi-change neutral" id="kpi-cpc-change">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label"><span>Визиты (Метрика)</span><span class="kpi-flag" id="flag-visits"></span></div>
+            <div class="kpi-value" id="kpi-visits">—</div>
+            <div class="kpi-change neutral" id="kpi-visits-change">—</div>
+          </div>
+        </div>
+        <div class="note" id="kpi-note"></div>
+      </section>
+
+      <section class="card col-12">
+        <div class="title">Воронка конверсий</div>
+        <div style="display:grid; gap: 14px;">
+          <div>
+            <div class="funnel-section-title">Сайт (все источники)</div>
+            <div class="funnel-grid cols-3">
+              <div class="funnel-step" id="step-site-visits-engaged">
+                <div class="funnel-label">Визиты → Engaged</div>
+                <div class="funnel-value" id="funnel-site-visits-engaged">—</div>
+                <div class="funnel-rate" id="conv-site-visits-engaged">—</div>
+              </div>
+              <div class="funnel-step" id="step-site-engaged-leads">
+                <div class="funnel-label">Engaged → Leads</div>
+                <div class="funnel-value" id="funnel-site-engaged-leads">—</div>
+                <div class="funnel-rate" id="conv-site-engaged-leads">—</div>
+              </div>
+              <div class="funnel-step" id="step-site-total">
+                <div class="funnel-label">Leads (итого)</div>
+                <div class="funnel-value" id="funnel-site-leads-total">—</div>
+                <div class="funnel-rate" id="conv-site-total">—</div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="funnel-section-title">Директ (атрибуция Метрики)</div>
+            <div class="funnel-grid">
+              <div class="funnel-step" id="step-direct-impr-clicks">
+                <div class="funnel-label">Показы → Клики</div>
+                <div class="funnel-value" id="funnel-direct-impr-clicks">—</div>
+                <div class="funnel-rate" id="conv-direct-impressions-clicks">—</div>
+              </div>
+              <div class="funnel-step" id="step-direct-clicks-visits">
+                <div class="funnel-label">Клики → Визиты (Direct)</div>
+                <div class="funnel-value" id="funnel-direct-clicks-visits">—</div>
+                <div class="funnel-rate" id="conv-direct-clicks-visits">—</div>
+              </div>
+              <div class="funnel-step" id="step-direct-visits-engaged">
+                <div class="funnel-label">Визиты (Direct) → Engaged</div>
+                <div class="funnel-value" id="funnel-direct-visits-engaged">—</div>
+                <div class="funnel-rate" id="conv-direct-visits-engaged">—</div>
+              </div>
+              <div class="funnel-step" id="step-direct-engaged-leads">
+                <div class="funnel-label">Engaged (Direct) → Leads</div>
+                <div class="funnel-value" id="funnel-direct-engaged-leads">—</div>
+                <div class="funnel-rate" id="conv-direct-engaged-leads">—</div>
+              </div>
+              <div class="funnel-step" id="step-direct-cpl">
+                <div class="funnel-label">CPL (Директ)</div>
+                <div class="funnel-value" id="funnel-direct-cpl">—</div>
+                <div class="funnel-rate" id="conv-direct-total">—</div>
+              </div>
+            </div>
+            <div class="note" id="directFunnelNote" style="margin-top:8px;"></div>
+          </div>
+        </div>
+        <div class="note">Engaged = визиты × (1 − bounceRate). Leads берём из целей Метрики: если <span class="mono">goal_ids</span> не заданы — используем все цели (best effort). CPL считаем по расходу Директа.</div>
+      </section>
+
+      <section class="card col-12 alert-card" id="alertsCard">
+        <div class="title">Требует внимания</div>
+        <ul class="alert-list" id="alertsList"></ul>
+        <div class="note" id="alertsNote"></div>
+      </section>
+
+      <section class="card col-12">
+        <div class="title">Рекомендации</div>
+        <div class="rec-grid">
+          <div class="rec-card">
+            <h3>Сделать сегодня</h3>
+            <p>На основе текущих данных</p>
+            <ul class="rec-list" id="todayActions"></ul>
+          </div>
+          <div class="rec-card">
+            <h3>Вопросы для обсуждения</h3>
+            <p>Гипотезы и решения</p>
+            <ul class="rec-list" id="discussionQuestions"></ul>
+          </div>
+        </div>
+        <div class="note" id="recNotes"></div>
+      </section>
+
+      <section class="card col-12" id="metricaSourcesCard">
+        <div class="title">Сквозная аналитика (Метрика): визиты по источникам</div>
+        <div class="chart-wrap" style="height:260px;">
+          <canvas id="sourcesChart"></canvas>
+        </div>
+        <div class="sources-legend" id="sourcesLegend"></div>
+        <div class="note">Разрез: <span class="mono">lastSignTrafficSource + lastSignSourceEngine</span>. В легенде totals за выбранный период.</div>
+      </section>
+
+      <section class="card col-12" id="metricaGoalsCard">
+        <div class="title">Конверсии (Метрика): цели</div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin: -4px 0 10px;">
+          <span class="mono" style="color:var(--text-muted); font-size:12px;">Scope</span>
+          <button class="btn goal-scope-btn" data-scope="direct">Яндекс.Директ</button>
+          <button class="btn goal-scope-btn" data-scope="all">Все источники</button>
+          <span class="mono" style="color:var(--text-muted); font-size:12px; margin-left:10px;">Goal</span>
+          <select id="goalSelect" class="btn" style="padding:9px 10px;">
+            <option value="all">Все цели</option>
+          </select>
+        </div>
+        <div class="chart-wrap" style="height:260px;">
+          <canvas id="goalsChart"></canvas>
+        </div>
+        <div class="sources-legend" id="goalsLegend"></div>
+        <div class="note">Достижения целей (reaches). Если <span class="mono">goal_ids</span> не заданы — используем все цели (best effort).</div>
+      </section>
+
+      <section class="card col-12">
+        <div class="title">Динамика по дням</div>
+        <div class="chart-wrap">
+          <canvas id="dailyChart"></canvas>
+        </div>
+        <div class="note">Клики + расход (Direct), плюс сравнение с предыдущим периодом (если включено).</div>
+      </section>
+
+      <section class="card col-12">
+        <div class="title">Активные кампании</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Кампания</th>
+              <th>Показы</th>
+              <th>Клики</th>
+              <th>CTR</th>
+              <th>Расход</th>
+              <th>CPC</th>
+              <th>Leads</th>
+              <th>CPL</th>
+              <th>Тренд</th>
+              <th>vs Пред.</th>
+            </tr>
+          </thead>
+          <tbody id="campaignTableBody">
+            <tr><td colspan="10" style="color: var(--text-muted); padding: 18px; text-align: center;">Загрузка данных…</td></tr>
+          </tbody>
+        </table>
+        <div class="note" id="campaignCplNote">Клик по строке откроет детали кампании. Мини-графики рисуются из реальных дневных данных Direct.</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal" id="campaignModal" role="dialog" aria-modal="true">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <div>
+          <h3 class="modal-title" id="modalTitle">Campaign</h3>
+          <div class="small" id="modalSubtitle">—</div>
+        </div>
+        <button class="modal-close" id="modalClose">Close</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <div class="modal-grid">
+          <div class="card">
+            <div class="title">Воронка кампании (только Direct)</div>
+            <div class="funnel-grid">
+              <div class="funnel-step">
+                <div class="funnel-label">Показы → Клики</div>
+                <div class="funnel-value" id="m-impr-clicks">—</div>
+                <div class="funnel-rate" id="m-ctr">—</div>
+              </div>
+              <div class="funnel-step">
+                <div class="funnel-label">Клики → Расход</div>
+                <div class="funnel-value" id="m-clicks-cost">—</div>
+                <div class="funnel-rate" id="m-cpc">—</div>
+              </div>
+              <div class="funnel-step">
+                <div class="funnel-label">CPC</div>
+                <div class="funnel-value" id="m-cpc-only">—</div>
+                <div class="funnel-rate" id="m-cost-only">—</div>
+              </div>
+              <div class="funnel-step">
+                <div class="funnel-label">Дней в периоде</div>
+                <div class="funnel-value" id="m-days">—</div>
+                <div class="funnel-rate">—</div>
+              </div>
+              <div class="funnel-step">
+                <div class="funnel-label">vs Пред. (клики)</div>
+                <div class="funnel-value" id="m-vs-prev">—</div>
+                <div class="funnel-rate">—</div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="title">Динамика по дням (данные Direct)</div>
+            <div class="chart-wrap" style="height:240px;">
+              <canvas id="modalChart"></canvas>
+            </div>
+            <div class="note">Клики и расход по дням внутри выбранного периода.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.__DASHBOARD_DATA__ = /*__DATA_JSON__*/;
+    const ROOT = document.documentElement;
+    const ROOT_DATA = window.__DASHBOARD_DATA__ || {};
+    const MULTI = !!(ROOT_DATA && typeof ROOT_DATA === 'object' && ROOT_DATA.accounts && typeof ROOT_DATA.accounts === 'object');
+    const MULTI_META = MULTI ? (ROOT_DATA.meta || {}) : null;
+    const ACCOUNTS = MULTI ? (ROOT_DATA.accounts || {}) : null;
+
+    let ACTIVE_ACCOUNT_ID = null;
+    let DATA = MULTI ? {} : ROOT_DATA;
+
+    let meta = {};
+    let campaignData = {};
+    let metricaDailyData = [];
+    let metricaSources = {};
+    let metricaGoals = {};
+    let metricaGoalsDirect = {};
+    let metricaDirect = {};
+    let metricaDirectAllDaily = [];
+    let metricaDirectSplit = {};
+    let metricaDirectByCampaign = {};
+    let rec = {};
+    let REFERENCE_DATE = null;
+
+    function bindData(next) {
+      DATA = next && typeof next === 'object' ? next : {};
+      meta = DATA.meta || {};
+      campaignData = ((DATA.direct || {}).campaign_data) || {};
+      metricaDailyData = ((DATA.metrica || {}).daily_data) || [];
+      metricaSources = ((DATA.metrica || {}).sources) || {};
+      metricaGoals = ((DATA.metrica || {}).goals) || {};
+      metricaGoalsDirect = ((DATA.metrica || {}).goals_direct) || {};
+      metricaDirect = (((DATA.metrica || {}).direct) || {});
+      metricaDirectAllDaily = metricaDirect.daily || [];
+      metricaDirectSplit = ((DATA.metrica || {}).direct_split) || {};
+      metricaDirectByCampaign = ((DATA.metrica || {}).direct_by_campaign) || {};
+      rec = DATA.recommendations || {};
+      REFERENCE_DATE = getLatestDatasetDate();
+    }
+
+	    function getMetricaDirectDailyForFilter(mode) {
+	      if (mode === 'all') return Array.isArray(metricaDirectAllDaily) ? metricaDirectAllDaily : [];
+	      if (mode === 'unclassified') return getMetricaDirectDailyUnclassified();
+	      const blk = (metricaDirectSplit && metricaDirectSplit.available) ? metricaDirectSplit[mode] : null;
+	      const daily = blk && Array.isArray(blk.daily) ? blk.daily : [];
+	      return daily;
+	    }
+
+	    function getMetricaDirectDailyUnclassified() {
+	      const allDaily = Array.isArray(metricaDirectAllDaily) ? metricaDirectAllDaily : [];
+	      const splitOk = !!(metricaDirectSplit && metricaDirectSplit.available);
+	      const searchDaily = splitOk && metricaDirectSplit.search && Array.isArray(metricaDirectSplit.search.daily) ? metricaDirectSplit.search.daily : [];
+	      const rsyaDaily = splitOk && metricaDirectSplit.rsya && Array.isArray(metricaDirectSplit.rsya.daily) ? metricaDirectSplit.rsya.daily : [];
+	      if (!allDaily.length || !splitOk) return [];
+
+	      const mk = (daily, field) => {
+	        const m = new Map();
+	        (daily || []).forEach(r => { if (r && r.date) m.set(String(r.date).slice(0,10), Number(r[field] ?? 0)); });
+	        return m;
+	      };
+	      const vAll = mk(allDaily, 'visits');
+	      const vS = mk(searchDaily, 'visits');
+	      const vR = mk(rsyaDaily, 'visits');
+	      const lAll = mk(allDaily, 'leads');
+	      const lS = mk(searchDaily, 'leads');
+	      const lR = mk(rsyaDaily, 'leads');
+
+	      // Approximate bounce rate remainder from per-day weighted sums: bounceRate * visits.
+	      const brAll = mk(allDaily, 'bounceRate');
+	      const brS = mk(searchDaily, 'bounceRate');
+	      const brR = mk(rsyaDaily, 'bounceRate');
+
+	      const out = [];
+	      allDaily.forEach(r => {
+	        const day = String(r.date || '').slice(0,10);
+	        if (!day) return;
+	        const va = Number(vAll.get(day) ?? 0);
+	        const vs = Number(vS.get(day) ?? 0);
+	        const vr = Number(vR.get(day) ?? 0);
+	        const v = Math.max(0, va - vs - vr);
+
+	        const la = Number(lAll.get(day) ?? 0);
+	        const ls = Number(lS.get(day) ?? 0);
+	        const lr = Number(lR.get(day) ?? 0);
+	        const leads = Math.max(0, la - ls - lr);
+
+	        const bra = Number(brAll.get(day) ?? 0);
+	        const brs = Number(brS.get(day) ?? 0);
+	        const brr = Number(brR.get(day) ?? 0);
+	        let bounceRate = 0;
+	        if (v > 0) {
+	          const num = (bra * va) - (brs * vs) - (brr * vr);
+	          bounceRate = Math.max(0, Math.min(100, num / v));
+	        }
+	        const engaged = v * (1 - bounceRate/100);
+	        out.push({ date: day, visits: v, bounceRate, engaged, leads });
+	      });
+	      return out;
+	    }
+
+	    // UI state
+	    let currentPeriod = 'custom';
+	    let compareMode = 'prev'; // prev | none
+	    let filterMode = 'all'; // all | search | rsya | unclassified
+    let dailyChart = null;
+    let modalChart = null;
+    let sourcesChart = null;
+    let goalsChart = null;
+    let goalsScope = 'all'; // direct | all
+
+    function setActiveAccount(accountId, opts = {}) {
+      if (!MULTI) return;
+      const id = String(accountId || '').trim();
+      if (!id || !ACCOUNTS || !ACCOUNTS[id]) return;
+      ACTIVE_ACCOUNT_ID = id;
+      localStorage.setItem('yandexad_account_id', id);
+      const select = document.getElementById('accountSelect');
+      if (select && select.value !== id) select.value = id;
+      bindData(ACCOUNTS[id]);
+      updateHeaderMeta();
+      periodCache.clear();
+      if (opts && opts.rerender === false) return;
+      updateDashboard(currentPeriod);
+      if (dailyChart) dailyChart.update();
+      if (modalChart) modalChart.update();
+      if (sourcesChart) sourcesChart.update();
+      if (goalsChart) goalsChart.update();
+    }
+
+    function initAccountSelector() {
+      if (!MULTI) {
+        bindData(ROOT_DATA);
+        updateHeaderMeta();
+        return;
+      }
+      const group = document.getElementById('accountGroup');
+      const select = document.getElementById('accountSelect');
+      if (!group || !select) {
+        // Best-effort: fall back to the first dataset.
+        const ids = Object.keys(ACCOUNTS || {});
+        const first = ids.length ? ids[0] : null;
+        bindData(first ? ACCOUNTS[first] : {});
+        updateHeaderMeta();
+        return;
+      }
+
+      group.style.display = '';
+      const ids = Object.keys(ACCOUNTS || {});
+      const defaultId = (MULTI_META && MULTI_META.default_account_id) ? String(MULTI_META.default_account_id) : (ids[0] || '');
+      const saved = localStorage.getItem('yandexad_account_id');
+      const initial = ids.includes(saved) ? saved : (ids.includes(defaultId) ? defaultId : (ids[0] || ''));
+      select.innerHTML = '';
+      ids.forEach(id => {
+        const m = ((ACCOUNTS[id] || {}).meta) || {};
+        const label = m.project_name ? `${m.project_name} (${id})` : id;
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = label;
+        select.appendChild(opt);
+      });
+      select.value = initial;
+      select.addEventListener('change', () => setActiveAccount(select.value));
+      ACTIVE_ACCOUNT_ID = initial;
+      bindData(ACCOUNTS[initial]);
+      updateHeaderMeta();
+    }
+
+    const colorsForTheme = () => {
+      const light = ROOT.getAttribute('data-theme') === 'light';
+      return {
+        gridColor: getComputedStyle(ROOT).getPropertyValue('--grid-color').trim() || (light ? 'rgba(17,24,39,.10)' : 'rgba(255,255,255,.08)'),
+        textPrimary: getComputedStyle(ROOT).getPropertyValue('--text-primary').trim(),
+        textSecondary: getComputedStyle(ROOT).getPropertyValue('--text-secondary').trim(),
+      };
+    };
+
+    const fmtInt = new Intl.NumberFormat('ru-RU');
+    const fmt2 = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
+
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+    // Theme toggle
+    // Important: keep applyTheme() side-effect-free w.r.t. dashboard rendering to avoid TDZ issues
+    // during initial script execution.
+    function applyTheme(theme) {
+      if (theme === 'light') {
+        ROOT.setAttribute('data-theme', 'light');
+        document.getElementById('themeIcon').textContent = '☀️';
+      } else {
+        ROOT.removeAttribute('data-theme');
+        document.getElementById('themeIcon').textContent = '🌙';
+      }
+      localStorage.setItem('yandexad_theme', theme);
+    }
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const cur = ROOT.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      applyTheme(cur === 'light' ? 'dark' : 'light');
+      updateDashboard(currentPeriod);
+      if (dailyChart) dailyChart.update();
+      if (modalChart) modalChart.update();
+      if (sourcesChart) sourcesChart.update();
+      if (goalsChart) goalsChart.update();
+    });
+    applyTheme(localStorage.getItem('yandexad_theme') || 'dark');
+
+    function updateHeaderMeta() {
+      const title = meta.project_name ? `${meta.project_name} — BI Dashboard` : 'BI Dashboard';
+      const accountLabel = meta.project_name ? `${meta.account_id || meta.direct_client_login || '—'} (${meta.project_name})` : (meta.account_id || meta.direct_client_login || '—');
+      setText('pageTitle', title);
+      setText('accountMeta', accountLabel);
+      setText('periodMeta', `${meta.date_from || '—'} … ${meta.date_to || '—'}`);
+      setText('generatedMeta', (MULTI && MULTI_META && MULTI_META.generated_at) ? MULTI_META.generated_at : (meta.generated_at || '—'));
+    }
+
+    // Date helpers
+    const parseYmd = (s) => {
+      const [y,m,d] = String(s).slice(0,10).split('-').map(x => Number(x));
+      return new Date(y, (m || 1) - 1, d || 1, 12, 0, 0, 0);
+    };
+    const toYmd = (dt) => dt.toISOString().slice(0,10);
+    const addDays = (dt, days) => { const x = new Date(dt); x.setDate(x.getDate() + days); return x; };
+    const enumerateDays = (start, end) => {
+      const out = [];
+      let cur = new Date(start);
+      cur.setHours(12,0,0,0);
+      const stop = new Date(end);
+      stop.setHours(12,0,0,0);
+      while (cur <= stop) { out.push(new Date(cur)); cur = addDays(cur, 1); }
+      return out;
+    };
+    const formatDayLabel = (dt) => {
+      const dd = String(dt.getDate()).padStart(2,'0');
+      const mm = String(dt.getMonth()+1).padStart(2,'0');
+      return `${dd}.${mm}`;
+    };
+
+    function getLatestDatasetDate() {
+      let max = null;
+      Object.values(campaignData).forEach(c => {
+        (c.daily || []).forEach(d => {
+          const dt = parseYmd(d.date);
+          if (!max || dt > max) max = dt;
+        });
+      });
+      (metricaDailyData || []).forEach(d => {
+        const dt = parseYmd(d.date);
+        if (!max || dt > max) max = dt;
+      });
+      if (meta.date_to) {
+        const dt = parseYmd(meta.date_to);
+        if (!max || dt > max) max = dt;
+      }
+      return max || new Date();
+    }
+
+    function getPeriodRange(period, reference = REFERENCE_DATE) {
+      const end = new Date(reference || new Date());
+      end.setHours(12,0,0,0);
+      if (period === 'custom') {
+        const s = meta.date_from ? parseYmd(meta.date_from) : addDays(end, -6);
+        const e = meta.date_to ? parseYmd(meta.date_to) : end;
+        return { start: s, end: e };
+      }
+      if (period === '30d') return { start: addDays(end, -29), end };
+      if (period === 'week') {
+        const mondayIndex = (end.getDay() + 6) % 7;
+        return { start: addDays(end, -mondayIndex), end };
+      }
+      if (period === 'month') return { start: new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0), end };
+      // default 7d
+      return { start: addDays(end, -6), end };
+    }
+
+    function buildDailyMap(daily, field) {
+      const map = new Map();
+      (daily || []).forEach(row => {
+        const key = String(row.date || '').slice(0,10);
+        const v = Number(row[field] ?? 0);
+        if (!key) return;
+        map.set(key, Number.isFinite(v) ? v : 0);
+      });
+      return map;
+    }
+
+    function hasNumericField(daily, field) {
+      return Array.isArray(daily) && daily.some(row => row && typeof row === 'object' && Number.isFinite(Number(row[field])));
+    }
+
+    function aggregateCampaignsDaily(field) {
+      const map = new Map();
+      Object.values(campaignData).forEach(c => {
+        if (filterMode !== 'all' && (c.type || 'unknown') !== filterMode) return;
+        (c.daily || []).forEach(row => {
+          const key = String(row.date || '').slice(0,10);
+          if (!key) return;
+          const v = Number(row[field] ?? 0);
+          const next = (map.get(key) ?? 0) + (Number.isFinite(v) ? v : 0);
+          map.set(key, next);
+        });
+      });
+      return map;
+    }
+
+    function buildSeriesFromMap(map, start, end) {
+      const days = enumerateDays(start, end);
+      return { labels: days.map(formatDayLabel), values: days.map(d => map.get(toYmd(d)) ?? 0) };
+    }
+
+    const sum = (arr) => (arr || []).reduce((a, b) => a + (Number.isFinite(Number(b)) ? Number(b) : 0), 0);
+
+    function computeTrend(values) {
+      if (!values || !values.length) return null;
+      const first = Number(values[0] || 0);
+      const last = Number(values[values.length - 1] || 0);
+      if (first === 0) return last === 0 ? { kind: 'zero', pct: 0 } : { kind: 'inf' };
+      return { kind: 'pct', pct: ((last / first) - 1) * 100 };
+    }
+
+    const periodCache = new Map();
+
+    function renderMetricaSources(range) {
+      const card = document.getElementById('metricaSourcesCard');
+      const legendEl = document.getElementById('sourcesLegend');
+      const canvas = document.getElementById('sourcesChart');
+      if (!card || !legendEl || !canvas) return;
+
+      const series = (metricaSources && metricaSources.available && Array.isArray(metricaSources.series)) ? metricaSources.series : [];
+      if (!series.length) {
+        card.style.display = 'none';
+        return;
+      }
+      card.style.display = '';
+
+      const days = enumerateDays(range.start, range.end);
+      const labels = days.map(formatDayLabel);
+
+      // Use clearly distinct hues; avoid "similar greens" for different series.
+      const palette = [
+        '#ef4444', // red
+        '#f59e0b', // amber
+        '#14b8a6', // teal
+        '#ec4899', // pink
+        '#eab308', // yellow
+        '#0ea5e9', // sky
+        '#f97316', // orange
+        '#8b5cf6', // violet
+      ];
+      const colors = colorsForTheme();
+
+      const datasets = [];
+      const totals = [];
+      const used = new Set();
+      const pickColor = (s, idx) => {
+        const key = String(s.key || '');
+        const label = String(s.label || '');
+        if (key === 'other') return '#94a3b8';        // slate/gray
+        if (key === 'organic') return '#3b82f6';      // blue
+        if (key === 'direct') return '#a855f7';       // purple
+        if (/директ/i.test(label)) return '#22c55e';  // green (reserve for Yandex Direct)
+        // fallback: first unused from palette
+        for (let i = 0; i < palette.length; i++) {
+          const c = palette[(idx + i) % palette.length];
+          if (!used.has(c)) return c;
+        }
+        return palette[idx % palette.length];
+      };
+      series.forEach((s, idx) => {
+        const m = new Map();
+        (s.daily || []).forEach(r => { if (r && r.date) m.set(String(r.date).slice(0,10), Number(r.visits ?? 0)); });
+        const values = days.map(d => m.get(toYmd(d)) ?? 0);
+        const total = values.reduce((a,b) => a + (Number.isFinite(Number(b)) ? Number(b) : 0), 0);
+        const color = pickColor(s, idx);
+        used.add(color);
+        totals.push({ label: s.label || s.key || `Series ${idx+1}`, total, color });
+        datasets.push({
+          label: s.label || s.key || `Series ${idx+1}`,
+          data: values,
+          borderColor: color,
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          borderWidth: 2,
+          tension: 0.25,
+        });
+      });
+
+      totals.sort((a,b) => b.total - a.total);
+      legendEl.innerHTML = totals.map(t => `
+        <div class="source-item">
+          <div class="source-left">
+            <span class="swatch" style="background:${t.color}"></span>
+            <div class="source-label" title="${String(t.label).replace(/\"/g,'&quot;')}">${String(t.label)}</div>
+          </div>
+          <div class="source-val">${fmtInt.format(Math.round(t.total))}</div>
+        </div>
+      `).join('');
+
+      if (sourcesChart) {
+        sourcesChart.destroy();
+        sourcesChart = null;
+      }
+      if (typeof Chart === 'undefined') return;
+
+      sourcesChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: colors.gridColor }, ticks: { color: colors.textSecondary } },
+            y: { grid: { color: colors.gridColor }, ticks: { color: colors.textSecondary } },
+          },
+        }
+      });
+    }
+
+    function renderMetricaGoals(range) {
+      const card = document.getElementById('metricaGoalsCard');
+      const legendEl = document.getElementById('goalsLegend');
+      const canvas = document.getElementById('goalsChart');
+      const goalSelect = document.getElementById('goalSelect');
+      if (!card || !legendEl || !canvas) return;
+
+      const directAvailable = !!(metricaGoalsDirect && metricaGoalsDirect.available && Array.isArray(metricaGoalsDirect.goals) && metricaGoalsDirect.goals.length);
+      if (goalsScope === 'direct' && !directAvailable) goalsScope = 'all';
+      const src = (goalsScope === 'direct' && directAvailable) ? metricaGoalsDirect : metricaGoals;
+      const goals = (src && src.available && Array.isArray(src.goals)) ? src.goals : [];
+      if (!goals.length) {
+        card.style.display = 'none';
+        return;
+      }
+      card.style.display = '';
+
+      // Toggle buttons state
+      document.querySelectorAll('.goal-scope-btn').forEach(btn => {
+        const scope = btn.dataset.scope;
+        btn.classList.toggle('active', scope === goalsScope);
+        if (scope === 'direct') {
+          btn.disabled = !directAvailable;
+          btn.style.opacity = directAvailable ? '1' : '0.5';
+          btn.style.cursor = directAvailable ? 'pointer' : 'not-allowed';
+        }
+      });
+
+      // Populate goal selector (best effort) once per scope/source
+      if (goalSelect) {
+        const currentValue = goalSelect.value || 'all';
+        const key = `${goalsScope}::${goals.map(g => g.id).join(',')}`;
+        if (goalSelect.dataset.key !== key) {
+          const options = ['<option value="all">Все цели</option>'];
+          goals.forEach(g => {
+            const id = g.id || '';
+            const name = g.name || (id ? `Goal ${id}` : 'Goal');
+            const safeName = String(name).replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            options.push(`<option value="${String(id).replace(/\"/g,'&quot;')}">${safeName}</option>`);
+          });
+          goalSelect.innerHTML = options.join('');
+          goalSelect.dataset.key = key;
+          // restore selection when possible; default to "all"
+          const exists = Array.from(goalSelect.options).some(o => o.value === currentValue);
+          goalSelect.value = exists ? currentValue : 'all';
+        }
+      }
+      const selectedGoalId = goalSelect ? (goalSelect.value || 'all') : 'all';
+
+      const days = enumerateDays(range.start, range.end);
+      const labels = days.map(formatDayLabel);
+      const dayCount = days.length;
+      const prevEnd = addDays(range.start, -1);
+      const prevStart = addDays(prevEnd, -(dayCount - 1));
+      const prevDays = enumerateDays(prevStart, prevEnd);
+
+      const palette = [
+        '#00d26a', '#7aa2ff', '#fb7185', '#ffc107', '#a78bfa', '#38bdf8', '#f472b6', '#22c55e',
+      ];
+      const colors = colorsForTheme();
+
+      const isDirectScope = (goalsScope === 'direct' && directAvailable);
+      const directLeadsMap = (isDirectScope && metricaDirectAllDaily && metricaDirectAllDaily.length && hasNumericField(metricaDirectAllDaily, 'leads'))
+        ? buildDailyMap(metricaDirectAllDaily, 'leads')
+        : null;
+
+      // Build per-goal series values for the current period, and compute totals for sorting.
+      const tmp = goals.map((g, idx) => {
+        const m = new Map();
+        (g.daily || []).forEach(r => { if (r && r.date) m.set(String(r.date).slice(0,10), Number(r.reaches ?? 0)); });
+        const values = days.map(d => m.get(toYmd(d)) ?? 0);
+        const totalCur = values.reduce((a,b) => a + (Number.isFinite(Number(b)) ? Number(b) : 0), 0);
+        const totalPrev = prevDays.reduce((a,d) => a + (Number.isFinite(Number(m.get(toYmd(d)) ?? 0)) ? Number(m.get(toYmd(d)) ?? 0) : 0), 0);
+        return {
+          idx,
+          id: g.id || '',
+          label: g.name || `Goal ${g.id || idx}`,
+          map: m,
+          values,
+          totalCur,
+          totalPrev,
+        };
+      });
+
+      // Keep chart readable: show top 7 goals + "Other goals" remainder.
+      tmp.sort((a,b) => b.totalCur - a.totalCur);
+      const maxGoals = 7;
+      const shown = tmp.slice(0, maxGoals);
+      const hidden = tmp.slice(maxGoals);
+
+      const datasets = [];
+      const legend = [];
+      let anyTotalCur = null;
+      let anyTotalPrev = null;
+
+      // For the chart: either aggregate ("all") or a single selected goal.
+      if (selectedGoalId === 'all') {
+        let allValues = null;
+        let prevValues = null;
+        if (isDirectScope && directLeadsMap) {
+          allValues = days.map(d => directLeadsMap.get(toYmd(d)) ?? 0);
+          prevValues = prevDays.map(d => directLeadsMap.get(toYmd(d)) ?? 0);
+          anyTotalCur = sum(allValues);
+          anyTotalPrev = sum(prevValues);
+        } else {
+          allValues = labels.map((_, j) => tmp.reduce((acc, g) => acc + (Number(g.values[j]) || 0), 0));
+          prevValues = prevDays.map(d => tmp.reduce((acc, g) => acc + (Number(g.map.get(toYmd(d)) ?? 0) || 0), 0));
+          anyTotalCur = sum(allValues);
+          anyTotalPrev = sum(prevValues);
+        }
+        datasets.push({
+          label: 'Все цели',
+          data: allValues,
+          borderColor: '#00d26a',
+          backgroundColor: 'transparent',
+          pointRadius: 0,
+          borderWidth: 2,
+          tension: 0.25,
+        });
+        if (compareMode === 'prev') {
+          datasets.push({
+            label: 'Все цели (пред.)',
+            data: prevValues,
+            borderColor: 'rgba(0,210,106,0.35)',
+            borderDash: [6, 6],
+            backgroundColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.25,
+          });
+        }
+        legend.push({ label: 'Все цели', totalCur: anyTotalCur, totalPrev: anyTotalPrev, color: '#00d26a' });
+      } else {
+        const picked = tmp.find(g => String(g.id) === String(selectedGoalId));
+        if (picked) {
+          datasets.push({
+            label: picked.label,
+            data: picked.values,
+            borderColor: '#00d26a',
+            backgroundColor: 'transparent',
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.25,
+          });
+          if (compareMode === 'prev') {
+            const pickedPrev = prevDays.map(d => picked.map.get(toYmd(d)) ?? 0);
+            datasets.push({
+              label: `${picked.label} (пред.)`,
+              data: pickedPrev,
+              borderColor: 'rgba(0,210,106,0.35)',
+              borderDash: [6, 6],
+              backgroundColor: 'transparent',
+              pointRadius: 0,
+              borderWidth: 2,
+              tension: 0.25,
+            });
+          }
+          legend.push({ label: picked.label, totalCur: picked.totalCur, totalPrev: picked.totalPrev, color: '#00d26a' });
+        }
+      }
+
+      // Below-chart breakdown: always show per-goal totals (top 7 + other), regardless of chart selection.
+      const breakdown = [];
+      shown.forEach((g, i) => breakdown.push({ label: g.label, totalCur: g.totalCur, totalPrev: g.totalPrev, color: palette[i % palette.length] }));
+      const subsetTotalCur = tmp.reduce((acc, g) => acc + (Number.isFinite(Number(g.totalCur)) ? Number(g.totalCur) : 0), 0);
+      const subsetTotalPrev = tmp.reduce((acc, g) => acc + (Number.isFinite(Number(g.totalPrev)) ? Number(g.totalPrev) : 0), 0);
+      let otherTotalCur = hidden.reduce((acc, g) => acc + (Number.isFinite(Number(g.totalCur)) ? Number(g.totalCur) : 0), 0);
+      let otherTotalPrev = hidden.reduce((acc, g) => acc + (Number.isFinite(Number(g.totalPrev)) ? Number(g.totalPrev) : 0), 0);
+      // In Direct scope, "Все цели" can be derived from sumGoalReachesAny, while we may only have top-N goals in breakdown.
+      if (isDirectScope && selectedGoalId === 'all' && Number.isFinite(Number(anyTotalCur)) && Number.isFinite(Number(anyTotalPrev))) {
+        const missCur = Math.max(0, Number(anyTotalCur) - subsetTotalCur);
+        const missPrev = Math.max(0, Number(anyTotalPrev) - subsetTotalPrev);
+        otherTotalCur += missCur;
+        otherTotalPrev += missPrev;
+      }
+      if (otherTotalCur > 0 || otherTotalPrev > 0) {
+        breakdown.push({ label: 'Другие цели', totalCur: otherTotalCur, totalPrev: otherTotalPrev, color: 'rgba(234,240,255,.55)' });
+      }
+
+      legendEl.innerHTML = breakdown.map(t => {
+        let deltaHtml = '';
+        if (compareMode === 'prev') {
+          const prev = Number(t.totalPrev || 0);
+          const cur = Number(t.totalCur || 0);
+          let pct = null;
+          if (prev === 0) pct = (cur === 0) ? 0 : null;
+          else pct = ((cur / prev) - 1) * 100;
+          const cls = (pct === null) ? 'neutral' : (pct === 0 ? 'neutral' : (pct > 0 ? 'up' : 'down'));
+          const txt = (pct === null) ? '∞' : `${pct > 0 ? '+' : ''}${fmt2.format(pct)}%`;
+          deltaHtml = ` <span class="comparison-badge ${cls}">${txt}</span>`;
+        }
+        return `
+          <div class="source-item">
+            <div class="source-left">
+              <span class="swatch" style="background:${t.color}"></span>
+              <div class="source-label" title="${String(t.label).replace(/\"/g,'&quot;')}">${String(t.label)}</div>
+            </div>
+            <div class="source-val">${fmtInt.format(Math.round(t.totalCur))}${deltaHtml}</div>
+          </div>
+        `;
+      }).join('');
+
+      if (goalsChart) {
+        goalsChart.destroy();
+        goalsChart = null;
+      }
+      if (typeof Chart === 'undefined') return;
+
+      goalsChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: colors.gridColor }, ticks: { color: colors.textSecondary } },
+            y: { grid: { color: colors.gridColor }, ticks: { color: colors.textSecondary } },
+          },
+        }
+      });
+    }
+
+    function getOverallPeriodData(period) {
+      if (periodCache.has(period)) return periodCache.get(period);
+
+      const range = getPeriodRange(period);
+      const dayCount = enumerateDays(range.start, range.end).length;
+      const prevEnd = addDays(range.start, -1);
+      const prevStart = addDays(prevEnd, -(dayCount - 1));
+
+      const impMap = aggregateCampaignsDaily('impressions');
+      const clkMap = aggregateCampaignsDaily('clicks');
+      const cstMap = aggregateCampaignsDaily('cost');
+
+      const metMap = metricaDailyData && metricaDailyData.length ? buildDailyMap(metricaDailyData, 'visits') : null;
+      const bounceMap = metricaDailyData && metricaDailyData.length ? buildDailyMap(metricaDailyData, 'bounceRate') : null;
+      const durMap = metricaDailyData && metricaDailyData.length ? buildDailyMap(metricaDailyData, 'avgDuration') : null;
+	      const engagedMap = (metricaDailyData && hasNumericField(metricaDailyData, 'engaged')) ? buildDailyMap(metricaDailyData, 'engaged') : null;
+	      const leadMap = (metricaDailyData && hasNumericField(metricaDailyData, 'leads')) ? buildDailyMap(metricaDailyData, 'leads') : null;
+
+	      const directDailyEffective = getMetricaDirectDailyForFilter(filterMode);
+	      const directDailyUnclassified = (filterMode === 'unclassified') ? getMetricaDirectDailyUnclassified() : [];
+	      const directDailyEffectiveFinal = (filterMode === 'unclassified') ? directDailyUnclassified : directDailyEffective;
+	      const directDailyAll = Array.isArray(metricaDirectAllDaily) ? metricaDirectAllDaily : [];
+
+	      const directAllMap = directDailyAll && directDailyAll.length ? buildDailyMap(directDailyAll, 'visits') : null;
+	      const directAllLeadMap = (directDailyAll && hasNumericField(directDailyAll, 'leads')) ? buildDailyMap(directDailyAll, 'leads') : null;
+
+	      const directMap = directDailyEffectiveFinal && directDailyEffectiveFinal.length ? buildDailyMap(directDailyEffectiveFinal, 'visits') : null;
+	      const directBounceMap = directDailyEffectiveFinal && directDailyEffectiveFinal.length ? buildDailyMap(directDailyEffectiveFinal, 'bounceRate') : null;
+	      const directEngagedMap = directDailyEffectiveFinal && directDailyEffectiveFinal.length ? buildDailyMap(directDailyEffectiveFinal, 'engaged') : null;
+	      const directLeadMap = (directDailyEffectiveFinal && hasNumericField(directDailyEffectiveFinal, 'leads')) ? buildDailyMap(directDailyEffectiveFinal, 'leads') : null;
+
+      const imp = buildSeriesFromMap(impMap, range.start, range.end);
+      const clk = buildSeriesFromMap(clkMap, range.start, range.end);
+      const cst = buildSeriesFromMap(cstMap, range.start, range.end);
+
+      const prevImp = buildSeriesFromMap(impMap, prevStart, prevEnd);
+      const prevClk = buildSeriesFromMap(clkMap, prevStart, prevEnd);
+      const prevCst = buildSeriesFromMap(cstMap, prevStart, prevEnd);
+
+      const visitsSeries = metMap ? buildSeriesFromMap(metMap, range.start, range.end) : null;
+      const prevVisitsSeries = metMap ? buildSeriesFromMap(metMap, prevStart, prevEnd) : null;
+      const engagedSeries = engagedMap ? buildSeriesFromMap(engagedMap, range.start, range.end) : null;
+      const leadsSeries = leadMap ? buildSeriesFromMap(leadMap, range.start, range.end) : null;
+
+      const bounceSeries = bounceMap ? buildSeriesFromMap(bounceMap, range.start, range.end) : null;
+      const prevBounceSeries = bounceMap ? buildSeriesFromMap(bounceMap, prevStart, prevEnd) : null;
+      const durSeries = durMap ? buildSeriesFromMap(durMap, range.start, range.end) : null;
+
+	      const directVisitsSeries = directMap ? buildSeriesFromMap(directMap, range.start, range.end) : null;
+	      const directBounceSeries = directBounceMap ? buildSeriesFromMap(directBounceMap, range.start, range.end) : null;
+	      const directEngagedSeries = directEngagedMap ? buildSeriesFromMap(directEngagedMap, range.start, range.end) : null;
+	      const directLeadsSeries = directLeadMap ? buildSeriesFromMap(directLeadMap, range.start, range.end) : null;
+
+	      const directAllVisitsSeries = directAllMap ? buildSeriesFromMap(directAllMap, range.start, range.end) : null;
+	      const directAllLeadsSeries = directAllLeadMap ? buildSeriesFromMap(directAllLeadMap, range.start, range.end) : null;
+
+	      const prevDirectVisitsSeries = directMap ? buildSeriesFromMap(directMap, prevStart, prevEnd) : null;
+	      const prevDirectBounceSeries = directBounceMap ? buildSeriesFromMap(directBounceMap, prevStart, prevEnd) : null;
+	      const prevDirectEngagedSeries = directEngagedMap ? buildSeriesFromMap(directEngagedMap, prevStart, prevEnd) : null;
+	      const prevDirectLeadsSeries = directLeadMap ? buildSeriesFromMap(directLeadMap, prevStart, prevEnd) : null;
+
+      // Weighted bounce rate & avg duration (weighted by visits)
+      const weighted = (valSeries, weightSeries) => {
+        if (!valSeries || !weightSeries) return null;
+        let num = 0, den = 0;
+        for (let i = 0; i < valSeries.values.length; i++) {
+          const v = Number(valSeries.values[i] || 0);
+          const w = Number(weightSeries.values[i] || 0);
+          if (w <= 0) continue;
+          num += v * w;
+          den += w;
+        }
+        return den > 0 ? (num / den) : null;
+      };
+
+      const data = {
+        range,
+        prevRange: { start: prevStart, end: prevEnd },
+        impressions: sum(imp.values),
+        clicks: sum(clk.values),
+        cost: sum(cst.values),
+        visits: visitsSeries ? sum(visitsSeries.values) : null,
+        engaged: engagedSeries ? sum(engagedSeries.values) : null,
+        leads: leadsSeries ? sum(leadsSeries.values) : null,
+        bounceRate: (bounceSeries && visitsSeries) ? weighted(bounceSeries, visitsSeries) : null,
+        avgDuration: (durSeries && visitsSeries) ? weighted(durSeries, visitsSeries) : null,
+	        direct: {
+	          visits: directVisitsSeries ? sum(directVisitsSeries.values) : null,
+	          engaged: directEngagedSeries ? sum(directEngagedSeries.values) : null,
+	          leads: directLeadsSeries ? sum(directLeadsSeries.values) : null,
+	          bounceRate: (directBounceSeries && directVisitsSeries) ? weighted(directBounceSeries, directVisitsSeries) : null,
+	        },
+	        directAll: {
+	          visits: directAllVisitsSeries ? sum(directAllVisitsSeries.values) : null,
+	          leads: directAllLeadsSeries ? sum(directAllLeadsSeries.values) : null,
+	        },
+        prev: {
+          impressions: sum(prevImp.values),
+          clicks: sum(prevClk.values),
+          cost: sum(prevCst.values),
+          visits: prevVisitsSeries ? sum(prevVisitsSeries.values) : null,
+          bounceRate: (prevBounceSeries && prevVisitsSeries) ? weighted(prevBounceSeries, prevVisitsSeries) : null,
+          direct: {
+            visits: prevDirectVisitsSeries ? sum(prevDirectVisitsSeries.values) : null,
+            engaged: prevDirectEngagedSeries ? sum(prevDirectEngagedSeries.values) : null,
+            leads: prevDirectLeadsSeries ? sum(prevDirectLeadsSeries.values) : null,
+            bounceRate: (prevDirectBounceSeries && prevDirectVisitsSeries) ? weighted(prevDirectBounceSeries, prevDirectVisitsSeries) : null,
+          },
+        },
+        dailyLabels: clk.labels,
+        dailyClicks: clk.values,
+        dailyCost: cst.values,
+        dailyDirectLeads: directLeadsSeries ? directLeadsSeries.values : null,
+        dailyCpl: null,
+        prevDailyClicks: prevClk.values,
+        prevDailyCost: prevCst.values,
+        prevDailyDirectLeads: prevDirectLeadsSeries ? prevDirectLeadsSeries.values : null,
+        prevDailyCpl: null,
+      };
+
+      if (filterMode !== 'unclassified' && Array.isArray(data.dailyCost) && Array.isArray(data.dailyDirectLeads)) {
+        data.dailyCpl = data.dailyCost.map((costV, i) => {
+          const l = Number(data.dailyDirectLeads[i] ?? 0);
+          const c = Number(costV ?? 0);
+          if (!Number.isFinite(l) || l <= 0) return null;
+          return Number.isFinite(c) ? (c / l) : null;
+        });
+      }
+      if (filterMode !== 'unclassified' && Array.isArray(data.prevDailyCost) && Array.isArray(data.prevDailyDirectLeads)) {
+        data.prevDailyCpl = data.prevDailyCost.map((costV, i) => {
+          const l = Number(data.prevDailyDirectLeads[i] ?? 0);
+          const c = Number(costV ?? 0);
+          if (!Number.isFinite(l) || l <= 0) return null;
+          return Number.isFinite(c) ? (c / l) : null;
+        });
+      }
+
+      periodCache.set(period, data);
+      return data;
+    }
+
+    function updateKpiChange(elementId, current, prev, higherIsBetter) {
+      const element = document.getElementById(elementId);
+      if (!element) return;
+      const c = Number(current);
+      const p = Number(prev);
+      if (!Number.isFinite(c) || !Number.isFinite(p) || p <= 0) {
+        element.className = 'kpi-change neutral';
+        element.textContent = '—';
+        return;
+      }
+      const pct = ((c / p) - 1) * 100;
+      const up = pct > 0;
+      const good = higherIsBetter ? up : !up;
+      element.className = 'kpi-change ' + (pct === 0 ? 'neutral' : (good ? 'positive' : 'negative'));
+      const sign = pct > 0 ? '+' : '';
+      element.textContent = `${sign}${pct.toFixed(2)}% vs пред.`;
+    }
+
+	    function updateKpiCards(data) {
+	      const impressions = data.impressions;
+	      const clicks = data.clicks;
+	      const cost = data.cost;
+	      const visits = data.visits ?? 0;
+	      const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+	      const cpc = clicks > 0 ? (cost / clicks) : 0;
+
+	      if (filterMode === 'unclassified') {
+	        setText('kpi-impressions', '—');
+	        setText('kpi-clicks', '—');
+	        setText('kpi-ctr', '—');
+	        setText('kpi-cost', '—');
+	        setText('kpi-cpc', '—');
+	      } else {
+	        setText('kpi-impressions', fmtInt.format(Math.round(impressions)));
+	        setText('kpi-clicks', fmtInt.format(Math.round(clicks)));
+	        setText('kpi-ctr', `${ctr.toFixed(2)}%`);
+	        setText('kpi-cost', `${fmt2.format(cost)} ₽`);
+	        setText('kpi-cpc', `${fmt2.format(cpc)} ₽`);
+	      }
+	      setText('kpi-visits', data.visits === null ? '—' : fmtInt.format(Math.round(visits)));
+
+      const showComparison = compareMode === 'prev';
+      document.getElementById('compareMeta').textContent = showComparison ? `${toYmd(data.prevRange.start)} … ${toYmd(data.prevRange.end)}` : '—';
+
+	      if (showComparison) {
+	        if (filterMode === 'unclassified') {
+	          ['kpi-impressions-change','kpi-clicks-change','kpi-ctr-change','kpi-cost-change','kpi-cpc-change'].forEach(id => {
+	            const el = document.getElementById(id);
+	            if (!el) return;
+	            el.className = 'kpi-change neutral';
+	            el.textContent = '—';
+	          });
+	        } else {
+	          updateKpiChange('kpi-impressions-change', impressions, data.prev.impressions, true);
+	          updateKpiChange('kpi-clicks-change', clicks, data.prev.clicks, true);
+	          updateKpiChange('kpi-cost-change', cost, data.prev.cost, false);
+	          const prevCtr = data.prev.impressions > 0 ? (data.prev.clicks / data.prev.impressions) * 100 : 0;
+	          updateKpiChange('kpi-ctr-change', ctr, prevCtr, true);
+	          const prevCpc = data.prev.clicks > 0 ? (data.prev.cost / data.prev.clicks) : 0;
+	          updateKpiChange('kpi-cpc-change', cpc, prevCpc, false);
+	        }
+	        if (data.prev.visits !== null && data.visits !== null) {
+	          updateKpiChange('kpi-visits-change', data.visits, data.prev.visits, true);
+	        } else {
+          document.getElementById('kpi-visits-change').textContent = '—';
+          document.getElementById('kpi-visits-change').className = 'kpi-change neutral';
+        }
+      } else {
+        ['kpi-impressions-change','kpi-clicks-change','kpi-ctr-change','kpi-cost-change','kpi-cpc-change','kpi-visits-change'].forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.className = 'kpi-change neutral';
+          el.textContent = '—';
+        });
+      }
+
+	      const notes = [];
+	      if (data.bounceRate !== null && data.bounceRate !== undefined) notes.push(`Bounce ≈ ${Number(data.bounceRate).toFixed(2)}%`);
+	      if (data.avgDuration !== null && data.avgDuration !== undefined) notes.push(`Avg dur ≈ ${Number(data.avgDuration).toFixed(1)}s`);
+	      if (data.direct && data.direct.visits !== null && data.direct.visits !== undefined) {
+	        const suffix = (filterMode === 'all') ? '' : (filterMode === 'search' ? ' (Поиск)' : ' (РСЯ)');
+	        notes.push(`Direct visits${suffix} ≈ ${fmtInt.format(Math.round(Number(data.direct.visits) || 0))}`);
+	      }
+	      if (data.direct && data.direct.leads !== null && data.direct.leads !== undefined) {
+	        const suffix = (filterMode === 'all') ? '' : (filterMode === 'search' ? ' (Поиск)' : ' (РСЯ)');
+	        notes.push(`Direct leads${suffix} ≈ ${fmtInt.format(Math.round(Number(data.direct.leads) || 0))}`);
+	      }
+	      document.getElementById('kpi-note').textContent = notes.join(' · ');
+	    }
+
+	    function updateFunnel(data) {
+      // Reset bottleneck highlights
+      const resetStep = (id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('bottleneck');
+        el.removeAttribute('title');
+      };
+      [
+        'step-site-visits-engaged','step-site-engaged-leads','step-site-total',
+        'step-direct-impr-clicks','step-direct-clicks-visits','step-direct-visits-engaged','step-direct-engaged-leads','step-direct-cpl'
+      ].forEach(resetStep);
+
+      const markBottleneck = (id, title) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.add('bottleneck');
+        if (title) el.title = title;
+      };
+
+      const impressions = data.impressions;
+      const clicks = data.clicks;
+      const cost = data.cost;
+      const siteVisits = (data.visits ?? 0);
+      const siteBounce = (data.bounceRate !== null && data.bounceRate !== undefined) ? Number(data.bounceRate) : null;
+      const siteEngaged = (data.engaged !== null && data.engaged !== undefined)
+        ? Number(data.engaged)
+        : (siteBounce === null ? null : (siteVisits * (1 - siteBounce / 100)));
+      const siteLeads = (data.leads !== null && data.leads !== undefined) ? Number(data.leads) : null;
+
+	      const hasDirect = !!(data.direct && data.direct.visits !== null && data.direct.visits !== undefined);
+	      const directVisits = hasDirect ? Number(data.direct.visits || 0) : null;
+	      const directBounce = hasDirect && data.direct.bounceRate !== null && data.direct.bounceRate !== undefined ? Number(data.direct.bounceRate) : null;
+	      const directEngaged = hasDirect
+	        ? (data.direct.engaged !== null && data.direct.engaged !== undefined
+	          ? Number(data.direct.engaged)
+	          : (directBounce === null ? null : (Number(directVisits || 0) * (1 - directBounce / 100))))
+	        : null;
+	      const directLeads = hasDirect && data.direct.leads !== null && data.direct.leads !== undefined ? Number(data.direct.leads) : null;
+
+      // Site funnel (all sources)
+      if (siteEngaged === null) {
+        setText('funnel-site-visits-engaged', `${fmtInt.format(Math.round(siteVisits))} → —`);
+        setText('conv-site-visits-engaged', '—');
+      } else {
+        setText('funnel-site-visits-engaged', `${fmtInt.format(Math.round(siteVisits))} → ${fmtInt.format(Math.round(siteEngaged))}`);
+        setText('conv-site-visits-engaged', siteVisits > 0 ? `≈ ${(100 * siteEngaged / siteVisits).toFixed(2)}%` : '—');
+      }
+      if (siteLeads === null) {
+        setText('funnel-site-engaged-leads', `${siteEngaged === null ? '—' : fmtInt.format(Math.round(siteEngaged))} → —`);
+        setText('conv-site-engaged-leads', '—');
+        setText('funnel-site-leads-total', '—');
+        setText('conv-site-total', '—');
+      } else {
+        setText('funnel-site-engaged-leads', `${siteEngaged === null ? '—' : fmtInt.format(Math.round(siteEngaged))} → ${fmtInt.format(Math.round(siteLeads))}`);
+        setText('conv-site-engaged-leads', (siteEngaged && siteEngaged > 0) ? `≈ ${(100 * siteLeads / siteEngaged).toFixed(2)}%` : '—');
+        setText('funnel-site-leads-total', fmtInt.format(Math.round(siteLeads)));
+        setText('conv-site-total', '—');
+      }
+
+      // Site bottleneck: mark the step with the lowest available conversion rate.
+      const siteRates = [];
+      if (siteEngaged !== null && siteVisits > 0) siteRates.push({ id: 'step-site-visits-engaged', rate: (siteEngaged / siteVisits), label: 'Визиты → Engaged' });
+      if (siteLeads !== null && siteEngaged && siteEngaged > 0) siteRates.push({ id: 'step-site-engaged-leads', rate: (siteLeads / siteEngaged), label: 'Engaged → Leads' });
+      if (siteRates.length) {
+        siteRates.sort((a,b) => a.rate - b.rate);
+        const worst = siteRates[0];
+        markBottleneck(worst.id, `Узкое место (сайт): ${worst.label} ≈ ${(100*worst.rate).toFixed(2)}%`);
+      }
+
+	      // Direct funnel (Metrica-attributed Direct traffic)
+	      if (filterMode === 'unclassified') {
+	        setText('funnel-direct-impr-clicks', '—');
+	        setText('conv-direct-impressions-clicks', '—');
+	      } else {
+	        setText('funnel-direct-impr-clicks', `${fmtInt.format(Math.round(impressions))} → ${fmtInt.format(Math.round(clicks))}`);
+	        setText('conv-direct-impressions-clicks', impressions > 0 ? `CTR ≈ ${(100 * clicks / impressions).toFixed(2)}%` : '—');
+	      }
+	      const allowDirectAttribution = hasDirect;
+	      if (!allowDirectAttribution) {
+	        ['funnel-direct-clicks-visits','conv-direct-clicks-visits','funnel-direct-visits-engaged','conv-direct-visits-engaged','funnel-direct-engaged-leads','conv-direct-engaged-leads','funnel-direct-cpl'].forEach(id => setText(id, '—'));
+	        setText('conv-direct-total', '—');
+	        setText('directFunnelNote', '');
+	        return;
+	      }
+	      // When filter is Search/RSYA, Direct visits/leads come from UTMCampaign mapping (option C) and may be partial.
+	      if (filterMode !== 'all') {
+	        if (!(metricaDirectSplit && metricaDirectSplit.available)) {
+	          const suffix = (filterMode === 'search') ? 'Поиск' : (filterMode === 'rsya' ? 'РСЯ' : 'Не классифицировано');
+	          setText('directFunnelNote', `Директ (${suffix}) недоступен: нет корректной выборки по UTMCampaign (Option C). Проверь, что utm_campaign проставляется в кликах Директа и содержит campaign_id или уникальное имя кампании.`);
+	          return;
+	        }
+	        const allV = (data.directAll && data.directAll.visits !== null && data.directAll.visits !== undefined) ? Number(data.directAll.visits || 0) : null;
+	        const allL = (data.directAll && data.directAll.leads !== null && data.directAll.leads !== undefined) ? Number(data.directAll.leads || 0) : null;
+	        const shareV = (allV && allV > 0) ? (100 * (directVisits || 0) / allV) : null;
+	        const missV = (allV === null) ? null : Math.max(0, allV - (directVisits || 0));
+	        const missL = (allL === null || directLeads === null) ? null : Math.max(0, allL - (directLeads || 0));
+	        const suffix = filterMode === 'search' ? 'Поиск' : (filterMode === 'rsya' ? 'РСЯ' : 'Не классифицировано');
+	        const parts = (filterMode === 'unclassified')
+	          ? [`Директ (${suffix}) = остаток: Direct(all) − (Поиск + РСЯ).`]
+	          : [`Директ (${suffix}) рассчитан через UTMCampaign → тип кампании (Option C).`];
+	        if (shareV !== null) parts.push(`Покрытие визитов: ≈ ${shareV.toFixed(1)}% (${fmtInt.format(Math.round(directVisits||0))} из ${fmtInt.format(Math.round(allV))}).`);
+	        if (missV !== null && missV > 0) parts.push(`Неклассифицировано визитов: ${fmtInt.format(Math.round(missV))}.`);
+	        if (missL !== null && missL > 0) parts.push(`Неклассифицировано лидов: ${fmtInt.format(Math.round(missL))}.`);
+	        if (filterMode !== 'unclassified') parts.push('Рекомендуется: utm_campaign должен содержать campaign_id или уникальное имя кампании.');
+	        setText('directFunnelNote', parts.join(' '));
+	      } else {
+	        setText('directFunnelNote', '');
+	      }
+      if (filterMode === 'unclassified') {
+        setText('funnel-direct-clicks-visits', `— → ${fmtInt.format(Math.round(directVisits || 0))}`);
+        setText('conv-direct-clicks-visits', '—');
+      } else {
+        setText('funnel-direct-clicks-visits', `${fmtInt.format(Math.round(clicks))} → ${fmtInt.format(Math.round(directVisits || 0))}`);
+        setText('conv-direct-clicks-visits', (clicks > 0) ? `≈ ${(100 * (directVisits || 0) / clicks).toFixed(2)}%` : '—');
+      }
+
+      if (directEngaged === null) {
+        setText('funnel-direct-visits-engaged', `${fmtInt.format(Math.round(directVisits || 0))} → —`);
+        setText('conv-direct-visits-engaged', '—');
+      } else {
+        setText('funnel-direct-visits-engaged', `${fmtInt.format(Math.round(directVisits || 0))} → ${fmtInt.format(Math.round(directEngaged))}`);
+        setText('conv-direct-visits-engaged', (directVisits && directVisits > 0) ? `≈ ${(100 * directEngaged / directVisits).toFixed(2)}%` : '—');
+      }
+
+      if (directLeads === null) {
+        setText('funnel-direct-engaged-leads', `${directEngaged === null ? '—' : fmtInt.format(Math.round(directEngaged))} → —`);
+        setText('conv-direct-engaged-leads', '—');
+        setText('funnel-direct-cpl', '—');
+        setText('conv-direct-total', '—');
+        return;
+      }
+
+      setText('funnel-direct-engaged-leads', `${directEngaged === null ? '—' : fmtInt.format(Math.round(directEngaged))} → ${fmtInt.format(Math.round(directLeads))}`);
+      setText('conv-direct-engaged-leads', (directEngaged && directEngaged > 0) ? `≈ ${(100 * directLeads / directEngaged).toFixed(2)}%` : '—');
+	      if (filterMode === 'unclassified') {
+	        setText('funnel-direct-cpl', '—');
+	        setText('conv-direct-total', (directLeads > 0) ? `${fmtInt.format(Math.round(directLeads))} leads` : '—');
+	      } else {
+	        setText('funnel-direct-cpl', (directLeads > 0) ? `${fmt2.format(cost / directLeads)} ₽` : '—');
+	        setText('conv-direct-total', (directLeads > 0) ? `${fmtInt.format(Math.round(directLeads))} leads` : '—');
+	      }
+
+      // Direct bottleneck: mark the step with the lowest available conversion rate (excluding CTR).
+      const directRates = [];
+      if (filterMode !== 'unclassified' && clicks > 0 && directVisits !== null) directRates.push({ id: 'step-direct-clicks-visits', rate: (directVisits / clicks), label: 'Клики → Визиты' });
+      if (directEngaged !== null && directVisits && directVisits > 0) directRates.push({ id: 'step-direct-visits-engaged', rate: (directEngaged / directVisits), label: 'Визиты → Engaged' });
+      if (directLeads !== null && directEngaged && directEngaged > 0) directRates.push({ id: 'step-direct-engaged-leads', rate: (directLeads / directEngaged), label: 'Engaged → Leads' });
+      if (directRates.length) {
+        directRates.sort((a,b) => a.rate - b.rate);
+        const worst = directRates[0];
+        markBottleneck(worst.id, `Узкое место (Директ): ${worst.label} ≈ ${(100*worst.rate).toFixed(2)}%`);
+      }
+	    }
+
+    function updateDailyChart(data) {
+      if (!window.Chart) {
+        const canvas = document.getElementById('dailyChart');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        return;
+      }
+
+      const colors = colorsForTheme();
+      const showComparison = compareMode === 'prev';
+
+      if (dailyChart) {
+        dailyChart.destroy();
+        dailyChart = null;
+      }
+
+      const ctx = document.getElementById('dailyChart').getContext('2d');
+      const datasets = [
+        { label: 'Клики', data: data.dailyClicks, borderColor: 'rgba(102,126,234,0.95)', fill: false, tension: 0.35, yAxisID: 'y', pointRadius: 2 },
+        { label: 'Расход (₽)', data: data.dailyCost, borderColor: 'rgba(245,87,108,0.90)', fill: false, tension: 0.35, yAxisID: 'y1', pointRadius: 2 },
+      ];
+      if (filterMode !== 'unclassified' && Array.isArray(data.dailyCpl)) {
+        datasets.push({ label: 'CPL (₽/lead)', data: data.dailyCpl, borderColor: 'rgba(0,210,106,0.90)', fill: false, tension: 0.35, yAxisID: 'y2', pointRadius: 2 });
+      }
+
+      if (showComparison && data.prevDailyClicks) {
+        datasets.push({ label: 'Клики (пред.)', data: data.prevDailyClicks, borderColor: 'rgba(102,126,234,0.35)', borderDash: [5,5], fill: false, tension: 0.35, yAxisID: 'y', pointRadius: 2 });
+        datasets.push({ label: 'Расход (пред.)', data: data.prevDailyCost, borderColor: 'rgba(245,87,108,0.32)', borderDash: [5,5], fill: false, tension: 0.35, yAxisID: 'y1', pointRadius: 2 });
+        if (filterMode !== 'unclassified' && Array.isArray(data.prevDailyCpl)) {
+          datasets.push({ label: 'CPL (пред.)', data: data.prevDailyCpl, borderColor: 'rgba(0,210,106,0.32)', borderDash: [5,5], fill: false, tension: 0.35, yAxisID: 'y2', pointRadius: 2 });
+        }
+      }
+
+      dailyChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: data.dailyLabels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { color: colors.textPrimary } }
+          },
+          scales: {
+            x: { grid: { color: colors.gridColor }, ticks: { color: colors.textSecondary } },
+            y: { position: 'left', grid: { color: colors.gridColor }, ticks: { color: 'rgba(102,126,234,0.95)' } },
+            y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: 'rgba(245,87,108,0.90)' } },
+            y2: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: 'rgba(0,210,106,0.90)' }, display: (filterMode !== 'unclassified' && Array.isArray(data.dailyCpl)) }
+          }
+        }
+      });
+    }
+
+    function campaignTotalsForRange(campaign, start, end) {
+      const series = buildSeries(campaign.daily || [], start, end);
+      return {
+        impressions: sum(series.impressions.values),
+        clicks: sum(series.clicks.values),
+        cost: sum(series.cost.values),
+        series,
+      };
+    }
+
+    function buildSeries(daily, start, end) {
+      const days = enumerateDays(start, end);
+      const maps = {
+        impressions: buildDailyMap(daily, 'impressions'),
+        clicks: buildDailyMap(daily, 'clicks'),
+        cost: buildDailyMap(daily, 'cost'),
+      };
+      const labels = days.map(formatDayLabel);
+      return {
+        labels,
+        impressions: { labels, values: days.map(d => maps.impressions.get(toYmd(d)) ?? 0) },
+        clicks: { labels, values: days.map(d => maps.clicks.get(toYmd(d)) ?? 0) },
+        cost: { labels, values: days.map(d => maps.cost.get(toYmd(d)) ?? 0) },
+      };
+    }
+
+    function renderMiniChart(canvasId, clicksValues) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width = 120;
+      const H = canvas.height = 34;
+      ctx.clearRect(0,0,W,H);
+      const vals = clicksValues || [];
+      if (!vals.length) return;
+      const maxV = Math.max(1, ...vals.map(x => Number(x||0)));
+      ctx.strokeStyle = 'rgba(122,162,255,0.95)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      vals.forEach((v, i) => {
+        const x = (W * i) / (vals.length - 1 || 1);
+        const y = H - (H * (Number(v||0) / maxV));
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    function isCampaignCplAvailable() {
+      if (filterMode === 'unclassified') return false;
+      if (!metricaDirectByCampaign || !metricaDirectByCampaign.available) return false;
+      const meta = metricaDirectByCampaign.meta || {};
+      return !!meta.report_is_direct_only;
+    }
+
+    function getCampaignLeadMap(campaignId) {
+      const campaigns = (metricaDirectByCampaign && metricaDirectByCampaign.campaigns) ? metricaDirectByCampaign.campaigns : {};
+      const blk = campaigns ? campaigns[String(campaignId)] : null;
+      const daily = blk && Array.isArray(blk.daily) ? blk.daily : [];
+      if (!daily.length) return null;
+      return buildDailyMap(daily, 'leads');
+    }
+
+    function sumFromMap(map, start, end) {
+      if (!map) return 0;
+      const days = enumerateDays(start, end);
+      let total = 0;
+      days.forEach(d => { total += Number(map.get(toYmd(d)) ?? 0); });
+      return total;
+    }
+
+    function updateCampaignTable(period) {
+      const range = getPeriodRange(period);
+      const dayCount = enumerateDays(range.start, range.end).length;
+      const prevEnd = addDays(range.start, -1);
+      const prevStart = addDays(prevEnd, -(dayCount - 1));
+
+      const entries = Object.entries(campaignData)
+        .map(([id, camp]) => ({ id, camp }))
+        .filter(({ camp }) => filterMode === 'all' ? true : (camp.type === filterMode));
+
+      const cplEnabled = isCampaignCplAvailable();
+
+      // Sort by CPL asc (best -> worst) when available; otherwise by cost desc.
+      const scored = entries.map(({ id, camp }) => {
+        const cur = campaignTotalsForRange(camp, range.start, range.end);
+        const prev = campaignTotalsForRange(camp, prevStart, prevEnd);
+        let leadsCur = null;
+        let cplCur = null;
+        if (cplEnabled) {
+          const leadMap = getCampaignLeadMap(id);
+          if (leadMap) {
+            leadsCur = sumFromMap(leadMap, range.start, range.end);
+            if (leadsCur > 0) cplCur = (cur.cost / leadsCur);
+          }
+        }
+        return { id, camp, cur, prev, leadsCur, cplCur };
+      }).sort((a, b) => {
+        if (cplEnabled) {
+          const ax = Number(a.cplCur);
+          const bx = Number(b.cplCur);
+          const aOk = Number.isFinite(ax);
+          const bOk = Number.isFinite(bx);
+          if (aOk && bOk) return ax - bx;
+          if (aOk && !bOk) return -1;
+          if (!aOk && bOk) return 1;
+          // fallback: cost desc
+          return b.cur.cost - a.cur.cost;
+        }
+        return b.cur.cost - a.cur.cost;
+      });
+
+      const tbody = document.getElementById('campaignTableBody');
+      if (!tbody) return;
+
+      if (!scored.length) {
+        tbody.innerHTML = '<tr><td colspan="10" style="color: var(--text-muted); padding: 18px; text-align: center;">No campaigns</td></tr>';
+        const noteEl = document.getElementById('campaignCplNote');
+        if (noteEl) noteEl.textContent = 'Нет кампаний для выбранного фильтра.';
+        return { cplEnabled: false, worst: [] };
+      }
+
+      tbody.innerHTML = scored.slice(0, 50).map(({ id, camp, cur, prev }) => {
+        const ctr = cur.impressions > 0 ? (100 * cur.clicks / cur.impressions) : 0;
+        const cpc = cur.clicks > 0 ? (cur.cost / cur.clicks) : 0;
+
+        const trend = computeTrend(cur.series.clicks.values);
+        let badgeClass = 'neutral';
+        let arrow = '→';
+        let changeText = '—';
+        if (trend && trend.kind === 'inf') { badgeClass = 'up'; arrow = '↑'; changeText = '∞'; }
+        else if (trend && trend.kind === 'pct' && Number.isFinite(Number(trend.pct)) && Number(trend.pct) !== 0) {
+          badgeClass = Number(trend.pct) > 0 ? 'up' : 'down';
+          arrow = Number(trend.pct) > 0 ? '↑' : '↓';
+          const sign = Number(trend.pct) > 0 ? '+' : '';
+          changeText = `${sign}${Number(trend.pct).toFixed(1)}%`;
+        }
+
+        let vsPrev = '—';
+        let vsPrevClass = 'neutral';
+        if (compareMode === 'prev' && prev.clicks > 0) {
+          const pct = ((cur.clicks / prev.clicks) - 1) * 100;
+          const sign = pct > 0 ? '+' : '';
+          vsPrev = `${sign}${pct.toFixed(1)}%`;
+          vsPrevClass = pct > 0 ? 'up' : (pct < 0 ? 'down' : 'neutral');
+        }
+
+        const iconClass = camp.type === 'search' ? 'search' : (camp.type === 'rsya' ? 'rsya' : '');
+        const icon = camp.type === 'search' ? '🔍' : (camp.type === 'rsya' ? '🌐' : '•');
+        const name = (camp.shortName || camp.name || `#${id}`);
+        const sub = (camp.subName || '').trim();
+
+        const cplEnabled = isCampaignCplAvailable();
+        let leadsCell = '—';
+        let cplCell = '—';
+        if (cplEnabled) {
+          const leadMap = getCampaignLeadMap(id);
+          if (leadMap) {
+            const leadsCur = sumFromMap(leadMap, range.start, range.end);
+            leadsCell = fmtInt.format(Math.round(leadsCur || 0));
+            if (leadsCur > 0) cplCell = `${fmt2.format(cur.cost / leadsCur)} ₽`;
+          }
+        }
+
+        return `
+          <tr class="campaign-row" data-type="${camp.type || 'unknown'}" onclick="openCampaignModal('${id}')">
+            <td>
+              <div class="campaign-name">
+                <div class="campaign-icon ${iconClass}">${icon}</div>
+                <div>
+                  <div>${name}</div>
+                  <div style="font-size: 11px; color: var(--text-muted);">${sub}</div>
+                </div>
+              </div>
+            </td>
+            <td>${fmtInt.format(Math.round(cur.impressions))}</td>
+            <td>${fmtInt.format(Math.round(cur.clicks))}</td>
+            <td>${ctr.toFixed(2)}%</td>
+            <td>${fmt2.format(cur.cost)} ₽</td>
+            <td>${fmt2.format(cpc)} ₽</td>
+            <td>${leadsCell}</td>
+            <td>${cplCell}</td>
+            <td><canvas class="mini-chart" id="chart-${id}"></canvas></td>
+            <td><span class="comparison-badge ${vsPrevClass}">${vsPrev}</span></td>
+          </tr>
+        `;
+      }).join('');
+
+      // Render mini charts after DOM is updated
+      setTimeout(() => {
+        scored.slice(0, 50).forEach(({ id, cur }) => {
+          renderMiniChart(`chart-${id}`, cur.series.clicks.values);
+        });
+      }, 20);
+
+      const noteEl = document.getElementById('campaignCplNote');
+      if (noteEl) {
+        if (cplEnabled) {
+          noteEl.textContent = 'CPL по кампаниям рассчитан best-effort через UTMCampaign → CampaignId (только если UTMCampaign отчёт удалось ограничить Direct-трафиком).';
+        } else if (filterMode === 'unclassified') {
+          noteEl.textContent = 'В режиме “Не классифицировано” CPL по кампаниям недоступен (нет корректной атрибуции расхода/лидов).';
+        } else {
+          noteEl.textContent = 'CPL по кампаниям недоступен: UTMCampaign отчёт не удалось ограничить Direct-трафиком (см. warnings).';
+        }
+      }
+
+      const worst = (cplEnabled ? scored.filter(x => Number.isFinite(Number(x.cplCur))).slice().sort((a,b) => Number(b.cplCur)-Number(a.cplCur)).slice(0,3) : []);
+      return { cplEnabled, worst };
+    }
+
+    function fillRecommendations() {
+      const today = Array.isArray(rec.today_actions) ? rec.today_actions : [];
+      const questions = Array.isArray(rec.discussion_questions) ? rec.discussion_questions : [];
+      const notes = Array.isArray(rec.notes) ? rec.notes : [];
+
+      const fill = (id, items) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = (items.length ? items : ['—']).map(x => `<li>${String(x)}</li>`).join('');
+      };
+      fill('todayActions', today);
+      fill('discussionQuestions', questions);
+      document.getElementById('recNotes').textContent = notes.join(' ');
+    }
+
+    function clearKpiFlags() {
+      ['flag-impressions','flag-clicks','flag-ctr','flag-cost','flag-cpc','flag-visits'].forEach(id => setText(id, ''));
+    }
+
+    function updateAlerts(data, tableStats) {
+      const card = document.getElementById('alertsCard');
+      const listEl = document.getElementById('alertsList');
+      const noteEl = document.getElementById('alertsNote');
+      if (!card || !listEl || !noteEl) return;
+
+      clearKpiFlags();
+      if (compareMode !== 'prev') {
+        card.style.display = 'none';
+        return;
+      }
+
+      const alerts = [];
+      const pct = (cur, prev) => {
+        const c = Number(cur); const p = Number(prev);
+        if (!Number.isFinite(c) || !Number.isFinite(p) || p <= 0) return null;
+        return ((c / p) - 1) * 100;
+      };
+
+      // Direct CPL (account-level)
+      if (filterMode !== 'unclassified') {
+        const leadsCur = data.direct ? data.direct.leads : null;
+        const leadsPrev = (data.prev && data.prev.direct) ? data.prev.direct.leads : null;
+        const cplCur = (Number(leadsCur) > 0) ? (Number(data.cost) / Number(leadsCur)) : null;
+        const cplPrev = (Number(leadsPrev) > 0) ? (Number(data.prev.cost) / Number(leadsPrev)) : null;
+        const cplPct = pct(cplCur, cplPrev);
+        if (cplPct !== null && cplPct > 20) {
+          alerts.push({ level: 'danger', text: `CPL вырос на ${cplPct.toFixed(1)}% (тек. ${fmt2.format(cplCur)} ₽/lead)` });
+          setText('flag-cost', '⚠️');
+        }
+      }
+
+      // Bounce rate (site + direct)
+      const brSiteDiff = (data.bounceRate !== null && data.prev.bounceRate !== null) ? (Number(data.bounceRate) - Number(data.prev.bounceRate)) : null;
+      if (brSiteDiff !== null && brSiteDiff > 5) {
+        alerts.push({ level: 'warn', text: `Отказы (сайт) +${brSiteDiff.toFixed(1)} п.п.` });
+        setText('flag-visits', '⚠️');
+      }
+      const brDirectDiff = (data.direct && data.prev && data.prev.direct && data.direct.bounceRate !== null && data.prev.direct.bounceRate !== null)
+        ? (Number(data.direct.bounceRate) - Number(data.prev.direct.bounceRate)) : null;
+      if (brDirectDiff !== null && brDirectDiff > 5) {
+        alerts.push({ level: 'warn', text: `Отказы (Директ) +${brDirectDiff.toFixed(1)} п.п.` });
+        setText('flag-visits', '⚠️');
+      }
+
+      // CTR drop
+      if (filterMode !== 'unclassified') {
+        const ctrCur = (data.impressions > 0) ? (100 * data.clicks / data.impressions) : 0;
+        const ctrPrev = (data.prev.impressions > 0) ? (100 * data.prev.clicks / data.prev.impressions) : 0;
+        const drop = ctrPrev - ctrCur;
+        if (drop > 0.3) {
+          alerts.push({ level: 'warn', text: `CTR упал на ${drop.toFixed(2)} п.п.` });
+          setText('flag-ctr', '⚠️');
+        }
+      }
+
+      // Spend up without leads growth (Direct)
+      if (filterMode !== 'unclassified') {
+        const costPct = pct(data.cost, data.prev.cost);
+        const leadsPct = pct((data.direct || {}).leads, ((data.prev || {}).direct || {}).leads);
+        if (costPct !== null && costPct > 30 && (leadsPct === null || leadsPct <= 0)) {
+          alerts.push({ level: 'danger', text: `Расход +${costPct.toFixed(1)}% без роста лидов` });
+          setText('flag-cost', '⚠️');
+        }
+      }
+
+      // Leads down (Direct)
+      const leadsDrop = pct((data.direct || {}).leads, ((data.prev || {}).direct || {}).leads);
+      if (leadsDrop !== null && leadsDrop < -20) {
+        alerts.push({ level: 'danger', text: `Лиды (Директ) ${leadsDrop.toFixed(1)}% vs пред.` });
+        setText('flag-visits', '⚠️');
+      }
+
+      // Worst CPL campaigns
+      if (tableStats && tableStats.cplEnabled && Array.isArray(tableStats.worst) && tableStats.worst.length) {
+        const worstTxt = tableStats.worst.map(x => `${x.camp.shortName || x.camp.name || x.id}: ${fmt2.format(x.cplCur)} ₽`).join(' · ');
+        alerts.push({ level: 'warn', text: `Топ-3 худших CPL по кампаниям: ${worstTxt}` });
+      }
+
+      if (!alerts.length) {
+        card.style.display = 'none';
+        return;
+      }
+
+      card.style.display = 'block';
+      listEl.innerHTML = alerts.map(a => {
+        const cls = a.level === 'danger' ? 'danger' : 'warn';
+        const label = a.level === 'danger' ? 'Критично' : 'Внимание';
+        return `<li><span class="alert-badge ${cls}">⚠️ ${label}</span> ${String(a.text)}</li>`;
+      }).join('');
+      noteEl.textContent = 'Алерты считаются автоматически (текущий период vs предыдущий период той же длины).';
+    }
+
+    function updateDashboard(period) {
+      currentPeriod = period;
+      const data = getOverallPeriodData(period);
+
+      setText('periodMeta', `${toYmd(data.range.start)} … ${toYmd(data.range.end)}`);
+      updateKpiCards(data);
+      updateFunnel(data);
+      renderMetricaSources(data.range);
+      renderMetricaGoals(data.range);
+      updateDailyChart(data);
+      const tableStats = updateCampaignTable(period);
+      fillRecommendations();
+      updateAlerts(data, tableStats);
+    }
+
+    // UI handlers
+    document.querySelectorAll('.period-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        periodCache.clear();
+        updateDashboard(btn.dataset.period);
+      });
+    });
+    document.querySelectorAll('.compare-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.compare-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        compareMode = btn.dataset.compare;
+        updateDashboard(currentPeriod);
+      });
+    });
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filterMode = btn.dataset.filter;
+        periodCache.clear();
+        updateDashboard(currentPeriod);
+      });
+    });
+    document.querySelectorAll('.goal-scope-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.goal-scope-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        goalsScope = btn.dataset.scope || 'all';
+        renderMetricaGoals(getPeriodRange(currentPeriod));
+      });
+    });
+    const goalSelectEl = document.getElementById('goalSelect');
+    if (goalSelectEl) {
+      goalSelectEl.addEventListener('change', () => {
+        renderMetricaGoals(getPeriodRange(currentPeriod));
+      });
+    }
+
+    // Modal
+    const modal = document.getElementById('campaignModal');
+    const closeModal = () => { modal.classList.remove('show'); if (modalChart) { modalChart.destroy(); modalChart = null; } };
+    document.getElementById('modalClose').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    window.openCampaignModal = (campaignId) => {
+      const camp = campaignData[campaignId];
+      if (!camp) return;
+
+      const range = getPeriodRange(currentPeriod);
+      const dayCount = enumerateDays(range.start, range.end).length;
+      const prevEnd = addDays(range.start, -1);
+      const prevStart = addDays(prevEnd, -(dayCount - 1));
+
+      const cur = campaignTotalsForRange(camp, range.start, range.end);
+      const prev = campaignTotalsForRange(camp, prevStart, prevEnd);
+
+      const ctr = cur.impressions > 0 ? (100 * cur.clicks / cur.impressions) : 0;
+      const cpc = cur.clicks > 0 ? (cur.cost / cur.clicks) : 0;
+      const vsPrevClicks = (compareMode === 'prev' && prev.clicks > 0) ? (((cur.clicks / prev.clicks) - 1) * 100) : null;
+
+      setText('modalTitle', camp.name || `#${campaignId}`);
+      setText('modalSubtitle', `Period: ${toYmd(range.start)} … ${toYmd(range.end)} · type=${camp.type || 'unknown'}`);
+      setText('m-impr-clicks', `${fmtInt.format(Math.round(cur.impressions))} → ${fmtInt.format(Math.round(cur.clicks))}`);
+      setText('m-ctr', `CTR ≈ ${ctr.toFixed(2)}%`);
+      setText('m-clicks-cost', `${fmtInt.format(Math.round(cur.clicks))} → ${fmt2.format(cur.cost)} ₽`);
+      setText('m-cpc', `CPC ≈ ${fmt2.format(cpc)} ₽`);
+      setText('m-cpc-only', `${fmt2.format(cpc)} ₽`);
+      setText('m-cost-only', `Cost ≈ ${fmt2.format(cur.cost)} ₽`);
+      setText('m-days', String(dayCount));
+      setText('m-vs-prev', (vsPrevClicks === null) ? '—' : `${vsPrevClicks > 0 ? '+' : ''}${vsPrevClicks.toFixed(1)}%`);
+
+      // Modal chart
+      if (modalChart) { modalChart.destroy(); modalChart = null; }
+      if (window.Chart) {
+        const colors = colorsForTheme();
+        const ctx = document.getElementById('modalChart').getContext('2d');
+        const datasets = [
+          { label: 'Клики', data: cur.series.clicks.values, borderColor: 'rgba(102,126,234,0.95)', fill: false, tension: 0.35, yAxisID: 'y', pointRadius: 2 },
+          { label: 'Расход (₽)', data: cur.series.cost.values, borderColor: 'rgba(245,87,108,0.90)', fill: false, tension: 0.35, yAxisID: 'y1', pointRadius: 2 },
+        ];
+        if (compareMode === 'prev') {
+          datasets.push({ label: 'Клики (пред.)', data: prev.series.clicks.values, borderColor: 'rgba(102,126,234,0.35)', borderDash: [5,5], fill: false, tension: 0.35, yAxisID: 'y', pointRadius: 2 });
+          datasets.push({ label: 'Расход (пред.)', data: prev.series.cost.values, borderColor: 'rgba(245,87,108,0.32)', borderDash: [5,5], fill: false, tension: 0.35, yAxisID: 'y1', pointRadius: 2 });
+        }
+        modalChart = new Chart(ctx, {
+          type: 'line',
+          data: { labels: cur.series.labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { color: colors.textPrimary } } },
+            scales: {
+              x: { grid: { color: colors.gridColor }, ticks: { color: colors.textSecondary } },
+              y: { position: 'left', grid: { color: colors.gridColor }, ticks: { color: 'rgba(102,126,234,0.95)' } },
+              y1: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: 'rgba(245,87,108,0.90)' } }
+            }
+          }
+        });
+      }
+
+      modal.classList.add('show');
+    };
+
+    // Initial render
+    initAccountSelector();
+    updateDashboard('custom');
+  </script>
+</body>
+</html>

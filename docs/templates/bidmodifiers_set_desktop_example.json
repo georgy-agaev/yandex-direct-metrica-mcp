@@ -1,0 +1,12 @@
+{
+  "BidModifiers": [
+    {
+      "CampaignId": 706377468,
+      "Type": "DESKTOP_ADJUSTMENT",
+      "DesktopAdjustment": {
+        "BidModifier": 90
+      }
+    }
+  ]
+}
+

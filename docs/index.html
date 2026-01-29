@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>yandex-direct-metrica-mcp</title>
+    <link rel="stylesheet" href="assets/style.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <h1>yandex-direct-metrica-mcp</h1>
+        <p class="subtitle">
+          MCP server for Yandex Direct + Yandex Metrica — reporting, joins, and a practical BI dashboard.
+        </p>
+        <p class="hint">
+          This project is not affiliated with, endorsed by, or sponsored by Yandex. Yandex, Yandex.Direct, Yandex.Metrica are trademarks of their respective owners.
+        </p>
+      </header>
+
+      <section class="card">
+        <h2>What you get</h2>
+        <ul>
+          <li>Direct reporting (impressions/clicks/spend, campaign breakdowns)</li>
+          <li>Metrica exports (visits, goals/leads, sources)</li>
+          <li>Human-friendly joins: Direct vs Metrica by UTM / yclid (best-effort)</li>
+          <li>Dashboard generator (Option 1): HTML + JSON, including multi-account dashboards</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>Install (Claude Code)</h2>
+        <pre><code>claude mcp add yandex-direct-metrica-mcp -- \
+  docker run --rm -i \
+    --env-file /path/to/your/.env \
+    -e MCP_ACCOUNTS_FILE=/data/accounts.json \
+    -v /path/to/your/state:/data \
+    ghcr.io/&lt;owner&gt;/yandex-direct-metrica-mcp:latest</code></pre>
+        <p class="hint">
+          Tip: for daily usage set <code>date_to</code> to <strong>yesterday</strong> (Direct/Metrica data for “today” is often incomplete).
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Docs</h2>
+        <ul>
+          <li><a href="../README.md">README</a></li>
+          <li><a href="quickstart.md">Quickstart</a></li>
+          <li><a href="dashboard-option1.md">Dashboard (Option 1)</a></li>
+          <li><a href="public-vs-pro.md">Public vs Pro</a></li>
+        </ul>
+      </section>
+
+      <footer class="footer">
+        <p>
+          Security: never commit OAuth tokens. Use <code>.env</code> and external secret stores.
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

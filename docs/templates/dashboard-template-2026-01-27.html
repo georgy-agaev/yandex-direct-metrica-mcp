@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yandex Ad Dashboard</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #111a33;
+        --text: #e6e9f2;
+        --muted: #9aa6c6;
+        --accent: #7aa2ff;
+        --good: #3ddc97;
+        --bad: #ff6b6b;
+        --border: rgba(255, 255, 255, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+        background: radial-gradient(1200px 800px at 20% 0%, #14204a 0%, var(--bg) 55%) fixed;
+        color: var(--text);
+      }
+      .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; }
+      h1 { font-size: 22px; margin: 0; letter-spacing: 0.2px; }
+      .meta { color: var(--muted); font-size: 12px; line-height: 1.4; text-align: right; }
+      .grid { display: grid; gap: 12px; margin-top: 16px; }
+      .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .row2 { grid-template-columns: 2fr 1fr; }
+      @media (max-width: 980px) { .cards { grid-template-columns: repeat(2, 1fr); } .row2 { grid-template-columns: 1fr; } header { flex-direction: column; align-items: flex-start; } .meta { text-align: left; } }
+      .card {
+        background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px 14px;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.22);
+      }
+      .kpi-label { font-size: 12px; color: var(--muted); }
+      .kpi-value { font-size: 20px; font-weight: 700; margin-top: 6px; }
+      .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+      .panel-title { font-size: 13px; color: var(--muted); margin: 0 0 10px 0; }
+      .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .table th, .table td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+      .table th { color: var(--muted); font-weight: 600; text-align: left; }
+      .pill { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+      .pill b { color: var(--text); }
+      .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 980px) { .two-col { grid-template-columns: 1fr; } }
+      ul { margin: 0; padding-left: 18px; }
+      li { margin: 6px 0; color: var(--text); }
+      .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+      canvas { width: 100%; height: 180px; border: 1px solid var(--border); border-radius: 12px; background: rgba(0,0,0,0.12); }
+      .muted { color: var(--muted); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div>
+          <h1>Yandex Direct + Metrica — Dashboard</h1>
+          <div class="note">Реальные данные из MCP; без демо-чисел. Cost отображается в RUB.</div>
+        </div>
+        <div class="meta">
+          <div><span class="muted">Период:</span> <span id="period"></span></div>
+          <div><span class="muted">Account:</span> <span id="account" class="mono"></span></div>
+          <div><span class="muted">Generated:</span> <span id="generated" class="mono"></span></div>
+        </div>
+      </header>
+
+      <section class="grid cards">
+        <div class="card">
+          <div class="kpi-label">Impressions</div>
+          <div class="kpi-value" id="kpi-impressions">—</div>
+          <div class="kpi-sub" id="kpi-impressions-sub"></div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Clicks</div>
+          <div class="kpi-value" id="kpi-clicks">—</div>
+          <div class="kpi-sub" id="kpi-clicks-sub"></div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Cost</div>
+          <div class="kpi-value" id="kpi-cost">—</div>
+          <div class="kpi-sub" id="kpi-cost-sub"></div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Visits (Metrica)</div>
+          <div class="kpi-value" id="kpi-visits">—</div>
+          <div class="kpi-sub" id="kpi-visits-sub"></div>
+        </div>
+      </section>
+
+      <section class="grid row2">
+        <div class="card">
+          <div class="panel-title">Daily trend (Clicks + Visits)</div>
+          <canvas id="chart"></canvas>
+          <div class="note">Синяя линия — клики (Direct), зелёная — визиты (Metrica, если доступно).</div>
+        </div>
+        <div class="card">
+          <div class="panel-title">Top campaigns by cost</div>
+          <table class="table" id="campaigns-table">
+            <thead>
+              <tr>
+                <th>Campaign</th>
+                <th>Clicks</th>
+                <th>Cost (RUB)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div class="note">Топ-10 по расходу за период (Direct report).</div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <div class="panel-title">Рекомендации</div>
+          <div class="two-col">
+            <div>
+              <div class="pill"><b>Сделать сегодня</b></div>
+              <ul id="today-actions"></ul>
+            </div>
+            <div>
+              <div class="pill"><b>Вопросы для обсуждения</b></div>
+              <ul id="discussion-questions"></ul>
+            </div>
+          </div>
+          <div class="note" id="rec-notes"></div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // Data is injected by the generator script.
+      const DATA = /*__DATA_JSON__*/;
+
+      const fmtInt = (n) => {
+        if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+        return Math.round(Number(n)).toLocaleString("ru-RU");
+      };
+      const fmtRub = (n) => {
+        if (n === null || n === undefined || Number.isNaN(Number(n))) return "—";
+        return Number(n).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " ₽";
+      };
+
+      const meta = DATA.meta || {};
+      document.getElementById("period").textContent = `${meta.date_from || "?"} … ${meta.date_to || "?"}`;
+      document.getElementById("account").textContent = meta.account_id || meta.direct_client_login || "default";
+      document.getElementById("generated").textContent = meta.generated_at || "";
+
+      const directTotals = (DATA.direct && DATA.direct.totals) || {};
+      const metricaTotals = (DATA.metrica && DATA.metrica.totals) || {};
+
+      document.getElementById("kpi-impressions").textContent = fmtInt(directTotals.impressions);
+      document.getElementById("kpi-clicks").textContent = fmtInt(directTotals.clicks);
+      document.getElementById("kpi-cost").textContent = fmtRub(directTotals.cost_rub);
+      document.getElementById("kpi-visits").textContent = fmtInt(metricaTotals.visits);
+
+      const cpc = (directTotals.clicks > 0) ? (directTotals.cost_rub / directTotals.clicks) : null;
+      document.getElementById("kpi-cost-sub").textContent = cpc ? `CPC ≈ ${fmtRub(cpc)}` : "";
+
+      const campaigns = (DATA.direct && DATA.direct.campaigns) || [];
+      const tbody = document.querySelector("#campaigns-table tbody");
+      campaigns.slice(0, 10).forEach((c) => {
+        const tr = document.createElement("tr");
+        const name = (c.campaign_name || "").trim() || `#${c.campaign_id}`;
+        tr.innerHTML = `
+          <td>${name}</td>
+          <td>${fmtInt(c.clicks)}</td>
+          <td>${fmtRub(c.cost_rub)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      const rec = DATA.recommendations || {};
+      const addList = (id, items) => {
+        const ul = document.getElementById(id);
+        (items || []).forEach((t) => {
+          const li = document.createElement("li");
+          li.textContent = t;
+          ul.appendChild(li);
+        });
+      };
+      addList("today-actions", rec.today_actions);
+      addList("discussion-questions", rec.discussion_questions);
+      const notes = (rec.notes || []).join(" ");
+      document.getElementById("rec-notes").textContent = notes;
+
+      // Simple chart (no deps): normalize series to [0..1] for rendering.
+      const directDaily = (DATA.direct && DATA.direct.daily) || [];
+      const metricaDaily = (DATA.metrica && DATA.metrica.daily) || [];
+      const byDateVisits = new Map(metricaDaily.map((x) => [x.date, Number(x.visits || 0)]));
+      const points = directDaily.map((x) => ({
+        date: x.date,
+        clicks: Number(x.clicks || 0),
+        visits: byDateVisits.get(x.date) || 0,
+      }));
+
+      const canvas = document.getElementById("chart");
+      const ctx = canvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+      ctx.scale(dpr, dpr);
+
+      const W = rect.width, H = rect.height;
+      const pad = 14;
+      const plotW = W - pad * 2;
+      const plotH = H - pad * 2;
+
+      const maxClicks = Math.max(1, ...points.map((p) => p.clicks));
+      const maxVisits = Math.max(1, ...points.map((p) => p.visits));
+      const xAt = (i) => pad + (points.length <= 1 ? 0 : (plotW * i) / (points.length - 1));
+      const yAt = (val, max) => pad + plotH - (plotH * (val / max));
+
+      const drawLine = (getter, max, color) => {
+        if (!points.length) return;
+        ctx.beginPath();
+        points.forEach((p, i) => {
+          const x = xAt(i);
+          const y = yAt(getter(p), max);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      };
+
+      // Grid
+      ctx.clearRect(0, 0, W, H);
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = pad + (plotH * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(pad, y);
+        ctx.lineTo(pad + plotW, y);
+        ctx.stroke();
+      }
+
+      drawLine((p) => p.clicks, maxClicks, "rgba(122,162,255,0.95)");
+      if (metricaDaily.length) {
+        drawLine((p) => p.visits, maxVisits, "rgba(61,220,151,0.9)");
+      }
+    </script>
+  </body>
+</html>

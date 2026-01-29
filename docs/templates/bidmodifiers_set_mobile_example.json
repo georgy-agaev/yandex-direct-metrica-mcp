@@ -1,0 +1,12 @@
+{
+  "BidModifiers": [
+    {
+      "CampaignId": 706377468,
+      "Type": "MOBILE_ADJUSTMENT",
+      "MobileAdjustment": {
+        "BidModifier": 120
+      }
+    }
+  ]
+}
+

@@ -1,0 +1,69 @@
+name: Docker Publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME_PUBLIC: yandex-direct-metrica-mcp
+  IMAGE_NAME_PRO: yandex-direct-metrica-mcp-pro
+  GHCR_IMAGE_PUBLIC: ghcr.io/${{ github.repository_owner }}/yandex-direct-metrica-mcp
+  GHCR_IMAGE_PRO: ghcr.io/${{ github.repository_owner }}/yandex-direct-metrica-mcp-pro
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [public, pro]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub (optional)
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ matrix.edition == 'public' && env.GHCR_IMAGE_PUBLIC || env.GHCR_IMAGE_PRO }}
+            ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' && (matrix.edition == 'public' && format('docker.io/{0}/{1}', secrets.DOCKERHUB_USERNAME, env.IMAGE_NAME_PUBLIC) || format('docker.io/{0}/{1}', secrets.DOCKERHUB_USERNAME, env.IMAGE_NAME_PRO)) || '' }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            MCP_PUBLIC_READONLY=${{ matrix.edition == 'public' && 'true' || 'false' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

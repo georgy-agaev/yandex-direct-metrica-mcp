@@ -1,0 +1,7 @@
+{
+  "SelectionCriteria": {
+    "CampaignIds": [706377468]
+  },
+  "FieldNames": ["Id", "CampaignId", "AdGroupId", "Type"]
+}
+

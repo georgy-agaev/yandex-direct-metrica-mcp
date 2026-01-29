@@ -1,0 +1,16 @@
+{
+  "BidModifiers": [
+    {
+      "CampaignId": 706377468,
+      "Type": "DEMOGRAPHICS_ADJUSTMENT",
+      "DemographicsAdjustments": [
+        {
+          "Age": "AGE_25_34",
+          "Gender": "GENDER_MALE",
+          "BidModifier": 110
+        }
+      ]
+    }
+  ]
+}
+
