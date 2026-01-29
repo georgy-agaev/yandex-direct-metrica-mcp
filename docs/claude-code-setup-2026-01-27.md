@@ -52,10 +52,10 @@ Then update `~/crew_a/.claude/settings.local.json` allow-list similarly.
 - “List available tools in yandexad and show me the main ones for reporting + joins.”
 
 ### 2) UTM join (works well)
-- “Сделай join Direct vs Metrica по UTM за последние 30 дней для кампании 106524685 и счётчика 91450749. Используй direct_client_login=elama-16161182 и utm_campaign='ПН ТГ VX  Ретаргетинг - гарнитуры - РСЯ'.”
+- “Сделай join Direct vs Metrica по UTM за последние 30 дней для кампании `<campaign_id>` и счётчика `<counter_id>`. Используй direct_client_login=`<direct_client_login>` и utm_campaign=`<utm_campaign>`.”
 
 ### 3) yclid join (best effort)
-- “Попробуй join по yclid за вчера для счётчика 91450749 (direct_client_login=elama-16161182). Объясни join_mode и почему может быть много unmatched.”
+- “Попробуй join по yclid за вчера для счётчика `<counter_id>` (direct_client_login=`<direct_client_login>`). Объясни join_mode и почему может быть много unmatched.”
 
 ## Dashboard generator (Option 1)
 

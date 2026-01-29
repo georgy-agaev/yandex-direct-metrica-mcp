@@ -20,10 +20,10 @@ Inside it, create `accounts.json`:
 {
   "accounts": [
     {
-      "id": "elama-16161182_vx",
-      "name": "Headset VX",
-      "direct_client_login": "elama-16161182",
-      "metrica_counter_ids": ["91450749"]
+      "id": "example_project",
+      "name": "Example project",
+      "direct_client_login": "example-client-login",
+      "metrica_counter_ids": ["12345678"]
     }
   ]
 }
@@ -72,4 +72,3 @@ claude mcp list
 In Claude Code, try:
 - “List accounts from the server.”
 - “Generate `dashboard.generate_option1` for all accounts for the last 30 days **to yesterday**, save into `/path/to/dashboards`, `all_accounts=true`, `return_data=false`, and give me the HTML path.”
-

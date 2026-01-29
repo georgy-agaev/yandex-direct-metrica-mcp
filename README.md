@@ -19,10 +19,10 @@ Create `accounts.json` (multi-account dashboards use this):
 {
   "accounts": [
     {
-      "id": "elama-16161182_vx",
-      "name": "Headset VX",
-      "direct_client_login": "elama-16161182",
-      "metrica_counter_ids": ["91450749"]
+      "id": "account_ID",
+      "name": "account_name",
+      "direct_client_login": "direc_client_login",
+      "metrica_counter_ids": ["9999999"]
     }
   ]
 }

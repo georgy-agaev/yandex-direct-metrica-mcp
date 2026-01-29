@@ -22,7 +22,7 @@ Tip: to make UIs show a dropdown of known client logins, set `YANDEX_DIRECT_CLIE
 {
   "tool": "direct.list_campaigns",
   "arguments": {
-    "direct_client_login": "elama-16161182",
+    "direct_client_login": "<direct_client_login>",
     "field_names": ["Id", "Name", "Type", "Status", "State"]
   }
 }
