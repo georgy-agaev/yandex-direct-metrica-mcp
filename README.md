@@ -39,12 +39,40 @@ Important: **do not** commit secrets to git.
 
 ### 3) Add MCP server to Claude Code
 
-Using a locally-built image:
+Using the published Docker Hub image (recommended):
 ```bash
-docker build -t yandex-direct-metrica-mcp:local .
+claude mcp add yandex-direct-metrica-mcp -- \
+  docker run --rm -i \
+    --env-file /path/to/your/.env \
+    -e MCP_ACCOUNTS_FILE=/data/accounts.json \
+    -v /path/to/your/state:/data \
+    docker.io/4georgyagaev/yandex-direct-metrica-mcp:latest
 ```
 
+Pinned to a specific version:
 ```bash
+claude mcp add yandex-direct-metrica-mcp -- \
+  docker run --rm -i \
+    --env-file /path/to/your/.env \
+    -e MCP_ACCOUNTS_FILE=/data/accounts.json \
+    -v /path/to/your/state:/data \
+    docker.io/4georgyagaev/yandex-direct-metrica-mcp:v0.1.3
+```
+
+Using the published GHCR image (alternative):
+```bash
+claude mcp add yandex-direct-metrica-mcp -- \
+  docker run --rm -i \
+    --env-file /path/to/your/.env \
+    -e MCP_ACCOUNTS_FILE=/data/accounts.json \
+    -v /path/to/your/state:/data \
+    ghcr.io/georgy-agaev/yandex-direct-metrica-mcp:v0.1.3
+```
+
+Using a locally-built image (for development):
+```bash
+docker build -t yandex-direct-metrica-mcp:local .
+
 claude mcp add yandex-direct-metrica-mcp -- \
   docker run --rm -i \
     --env-file /path/to/your/.env \
