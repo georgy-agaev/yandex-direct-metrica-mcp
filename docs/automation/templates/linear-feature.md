@@ -44,6 +44,8 @@
 
 ## Release Validation
 
+Feature-stage repo docs required: yes/no
+
 ## Handoff
 
 ## Notes

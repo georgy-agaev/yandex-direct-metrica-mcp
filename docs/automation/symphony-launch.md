@@ -26,6 +26,15 @@ This keeps the credentials in one place while still making them available to the
 
 If a live-validation command still reports missing Search API credentials, the implementation/review lane may source `<state-root>/yandex.ad/.env` directly in that command. Do not print values and do not copy the file into the repo or workspace.
 
+## Required Runtime Paths
+
+Set explicit runtime roots before launch:
+
+- `SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad`
+- `SYMPHONY_WORKSPACE_ROOT=$SYMPHONY_ROOT/workspaces`
+
+Do not run the copied workflow files with a literal `<symphony-root>` placeholder. Render them first.
+
 ## Codex runtime
 
 Use the app-bundled Codex binary for Symphony lanes:
@@ -34,22 +43,29 @@ Use the app-bundled Codex binary for Symphony lanes:
 
 Reason:
 
-- the global Codex config (for example `$CODEX_HOME/config.toml`) already carries the enabled browser/plugin configuration;
+- Symphony should use a dedicated Codex config root such as `$HOME/.codex-symphony`;
+- keep the main interactive Codex profile separate from the lower-cost Symphony profile;
+- the dedicated Symphony profile should currently use:
+  - `model = "gpt-5.5"`
+  - `model_reasoning_effort = "medium"`
 - using the app-bundled binary keeps Symphony closer to the same runtime that already exposes `browser@openai-bundled`, `chrome-devtools`, and `playwrigh` in the interactive desktop setup.
 
 ## Implementation lane
 
 ```bash
-cd <symphony-root>/symphony/elixir
-mkdir -p <symphony-root>/logs
+export SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad
+export SYMPHONY_WORKSPACE_ROOT="$SYMPHONY_ROOT/workspaces"
+python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT"
+cd "$SYMPHONY_ROOT"/symphony/elixir
+mkdir -p "$SYMPHONY_ROOT"/logs "$SYMPHONY_WORKSPACE_ROOT"
 set -a
-. <symphony-root>/.env
+. "$SYMPHONY_ROOT"/.env
 . <state-root>/yandex.ad/.env
-export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex-symphony}"
 set +a
 /opt/homebrew/bin/mise exec -- ./bin/symphony \
-  <symphony-root>/workflows/WORKFLOW.yandexad.implementation.md \
-  --logs-root <symphony-root>/logs \
+  "$SYMPHONY_ROOT"/workflows/WORKFLOW.yandexad.implementation.md \
+  --logs-root "$SYMPHONY_ROOT"/logs \
   --port 3321 \
   --i-understand-that-this-will-be-running-without-the-usual-guardrails
 ```
@@ -57,29 +73,31 @@ set +a
 ## Review lane
 
 ```bash
-cd <symphony-root>/symphony/elixir
-mkdir -p <symphony-root>/logs
+export SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad
+export SYMPHONY_WORKSPACE_ROOT="$SYMPHONY_ROOT/workspaces"
+python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT"
+cd "$SYMPHONY_ROOT"/symphony/elixir
+mkdir -p "$SYMPHONY_ROOT"/logs "$SYMPHONY_WORKSPACE_ROOT"
 set -a
-. <symphony-root>/.env
+. "$SYMPHONY_ROOT"/.env
 . <state-root>/yandex.ad/.env
-export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex-symphony}"
 set +a
 /opt/homebrew/bin/mise exec -- ./bin/symphony \
-  <symphony-root>/workflows/WORKFLOW.yandexad.review.md \
-  --logs-root <symphony-root>/logs \
+  "$SYMPHONY_ROOT"/workflows/WORKFLOW.yandexad.review.md \
+  --logs-root "$SYMPHONY_ROOT"/logs \
   --port 3322 \
   --i-understand-that-this-will-be-running-without-the-usual-guardrails
 ```
 
-## Copy Updated Workflow Files
+## Render Updated Workflow Files
 
 When the repo workflow files change, refresh the external Symphony copies:
 
 ```bash
-cp docs/automation/workflows/WORKFLOW.yandexad.implementation.md \
-  <symphony-root>/workflows/
-cp docs/automation/workflows/WORKFLOW.yandexad.review.md \
-  <symphony-root>/workflows/
+export SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad
+export SYMPHONY_WORKSPACE_ROOT="$SYMPHONY_ROOT/workspaces"
+python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT"
 ```
 
 ## Expected Runtime Behavior

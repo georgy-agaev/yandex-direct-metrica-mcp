@@ -136,6 +136,16 @@ If an issue adds or changes a tool response:
 
 must describe the same shape.
 
+## 7a. Keep stage-owned docs explicit
+
+By default:
+
+- feature stage owns runtime code, tests, and stage handoff artifacts;
+- PR stage owns repo-facing docs alignment needed for merge review;
+- release stage owns release notes, versioning, tags, and published artifact notes.
+
+Do not require `README.md`, `CHANGELOG.md`, cross-language docs, or client-facing handoff files in `Feature Validation` unless the feature is specifically about documentation or the runtime contract would be unverifiable without that exact file update.
+
 ## 8. Release is not the default end state for feature issues
 
 By default:

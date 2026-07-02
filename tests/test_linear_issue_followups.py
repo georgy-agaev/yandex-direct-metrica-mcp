@@ -65,3 +65,13 @@ def test_followup_description_for_release_contains_release_contract() -> None:
     assert "## Release Validation" in body
     assert "python scripts/live_validation.py --suite direct,metrica,wordstat,search" in body
     assert "No new feature work." in body
+
+
+def test_source_workspace_path_uses_env_override(monkeypatch) -> None:
+    original = linear_issue.DEFAULT_WORKSPACE_ROOT
+    monkeypatch.setenv("SYMPHONY_WORKSPACE_ROOT", "/tmp/symphony-workspaces")
+    try:
+        linear_issue.DEFAULT_WORKSPACE_ROOT = linear_issue.Path("/tmp/symphony-workspaces")
+        assert str(linear_issue.source_workspace_path("GEO-99")) == "/tmp/symphony-workspaces/GEO-99"
+    finally:
+        linear_issue.DEFAULT_WORKSPACE_ROOT = original

@@ -18,11 +18,12 @@ workspace:
 hooks:
   after_create: |
     git clone --depth 1 https://github.com/georgy-agaev/yandex-direct-metrica-mcp.git .
+    python scripts/trust_symphony_workspace.py --workspace .
 agent:
   max_concurrent_agents: 1
-  max_turns: 4
+  max_turns: 3
 codex:
-  command: /Applications/Codex.app/Contents/Resources/codex --config shell_environment_policy.inherit=all app-server
+  command: /Applications/Codex.app/Contents/Resources/codex --model gpt-5.4 --config shell_environment_policy.inherit=all app-server
   approval_policy: never
   thread_sandbox: workspace-write
   turn_sandbox_policy:
@@ -69,12 +70,13 @@ General rules:
    - `SYMPHONY_WORK_RESULT.md`;
    - repo-local validation/session artifacts under `docs/` or `docs/sessions/`.
    If operator evidence for the required check is already present there, summarize it in `SYMPHONY_WORK_RESULT.md` and continue instead of re-blocking the issue.
+13. Treat repository-wide documentation, changelog, release notes, PR copy, and downstream client handoff documents as later-stage work unless the issue body explicitly requires them in `Feature Validation`.
 
 ## Feature issue
 
 Do:
 
-- implement only the scoped code and docs change;
+- implement only the scoped runtime/code/test change plus stage handoff artifacts;
 - satisfy `Feature Validation` from the issue body.
 - if `Feature Validation` explicitly requires bounded read-only live validation, run it in this stage.
 - if `Required Capabilities` names `playwright` or `chrome-devtools` for browser-visible validation, attempt the agent-owned browser check before falling back to any operator blocker.
@@ -87,12 +89,15 @@ Do:
   - name it `SYMPHONY_STAGE_PATCH.diff`;
   - make it applicable from a fresh clone on `main`;
   - document the exact apply command in `SYMPHONY_STAGE_HANDOFF.md`.
+- before moving a feature issue to `In Review`, validate the handoff artifacts with:
+  - `python scripts/stage_handoff.py feature-verify --workspace . --repo .`
 - `SYMPHONY_STAGE_HANDOFF.md` for a feature issue must include:
   - source issue identifier;
   - base ref used for the patch;
   - exact patch file path;
   - the validation commands that passed;
   - any live-validation notes that the PR stage should preserve.
+- update repo-facing docs, `README.md`, `CHANGELOG.md`, release notes, and downstream client handoff files only when the issue body explicitly places them in `Feature Validation`.
 
 Default fallback only when the issue body does not define `Feature Validation`:
 
@@ -106,6 +111,7 @@ Do not:
 - create PRs
 - tag releases
 - publish images
+- spend feature-stage turns on repo-wide docs or release-note churn unless the issue body explicitly requires it in `Feature Validation`
 - run live Yandex API validation unless `Feature Validation` explicitly requires bounded read-only live validation
 
 ## PR issue
@@ -122,6 +128,8 @@ Default fallback only when the issue body does not define `PR Validation`:
 - generate PR metadata:
   - `python scripts/prepare_pr.py --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --output PR_BODY.md`
 - read the source-stage handoff and reproduce the approved diff before rerunning gates;
+- use the source workspace path named in the issue body together with:
+  - `python scripts/stage_handoff.py apply-feature-patch --source-workspace <source-workspace> --repo .`
 - if the source issue predates the handoff-artifact contract and the issue body names a source workspace path, you may recover the approved diff directly from that source workspace once and must document the recovery in `SYMPHONY_WORK_RESULT.md`;
 - if neither handoff artifacts nor a clear source-workspace recovery path exist, move the issue to `Backlog` instead of publishing a guessed diff;
 - create or reuse the suggested issue branch;
@@ -135,6 +143,8 @@ Default fallback only when the issue body does not define `PR Validation`:
   - PR URL;
   - validation commands that passed;
   - any release-facing notes the release stage must preserve.
+- before moving a PR issue to `In Review`, validate the handoff metadata with:
+  - `python scripts/stage_handoff.py pr-verify --workspace .`
 
 Do not:
 

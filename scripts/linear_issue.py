@@ -17,6 +17,12 @@ from typing import Any
 
 
 DEFAULT_CONFIG = Path("/Users/georgyagaev/Projects/Symphony_yaad/linear.yandexad.json")
+DEFAULT_SYMPHONY_ROOT = Path(
+    os.environ.get("SYMPHONY_ROOT", str(Path.home() / "Projects" / "Symphony_yaad"))
+).expanduser()
+DEFAULT_WORKSPACE_ROOT = Path(
+    os.environ.get("SYMPHONY_WORKSPACE_ROOT", str(DEFAULT_SYMPHONY_ROOT / "workspaces"))
+).expanduser()
 LINEAR_ENDPOINT = "https://api.linear.app/graphql"
 ISSUE_TYPE_PREFIX = "issue-type:"
 FOLLOWUP_LABEL = "generated-followup"
@@ -30,6 +36,10 @@ def load_json(path: Path) -> dict[str, Any]:
         raise SystemExit(f"Config not found: {path}") from None
     except json.JSONDecodeError as exc:
         raise SystemExit(f"Invalid JSON config {path}: {exc}") from None
+
+
+def source_workspace_path(issue_identifier: str) -> Path:
+    return DEFAULT_WORKSPACE_ROOT / issue_identifier
 
 
 def read_markdown(path: Path | None, text: str | None) -> str:
@@ -360,7 +370,7 @@ def followup_title(stage: str, source_issue: dict[str, Any], explicit_title: str
 
 
 def followup_description(stage: str, source_issue: dict[str, Any]) -> str:
-    source_workspace = f"/Users/georgyagaev/Projects/Symphony_yaad/workspaces/{source_issue['identifier']}"
+    source_workspace = str(source_workspace_path(source_issue["identifier"]))
     source_type = classify_issue_type(issue_label_names(source_issue))
     source_label_list = ", ".join(issue_label_names(source_issue)) or "none"
     common = [
@@ -630,7 +640,17 @@ def main() -> int:
             args.create_missing_labels,
         )
         existing = find_project_issue_by_title(api_key or "", input_payload["projectId"], input_payload["title"])
-        issue = existing or create_issue(api_key or "", input_payload)
+        if existing:
+            issue = update_issue(
+                api_key or "",
+                existing["id"],
+                {
+                    "stateId": input_payload["stateId"],
+                    "labelIds": input_payload["labelIds"],
+                },
+            )
+        else:
+            issue = create_issue(api_key or "", input_payload)
         comment_issue(api_key or "", source_issue["id"], comment_for_followup(stage, source_issue, issue))
         print(f"{issue['identifier']} {issue['url']}")
         return 0

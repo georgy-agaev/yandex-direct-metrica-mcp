@@ -63,6 +63,7 @@ Rule:
 - review lane verifies only the current stage validation;
 - later-stage validation must not be used to reject an earlier stage.
 - if a required capability or external input is missing, the issue must move to `Backlog`, not loop in `Todo`.
+- unless explicitly required in `Feature Validation`, repo-wide docs, changelog, PR copy, release notes, and downstream handoff documents belong to PR/release follow-up stages rather than the feature stage.
 
 `Required Capabilities` should explicitly answer:
 
