@@ -144,6 +144,9 @@ Behavior:
 
 - `followup-pr` creates a PR issue in the same team and project as the source issue;
 - `followup-release` creates a release issue in the same team and project as the source issue;
+- before a follow-up is created or resynced, the source workspace must pass the stage handoff verifier for its stage;
+- if a generated follow-up for the same source issue and stage already exists, Symphony must fully resync its title, description, labels, and state from the current source-stage contract instead of partially reusing stale content;
+- if the source handoff is invalid, Symphony must stop and fix the source stage instead of creating or refreshing a broken follow-up;
 - the new issue inherits context labels, replaces the old `issue-type:*` label, and adds:
   - `generated-followup`
   - `issue-type:pr` or `issue-type:release`

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -40,6 +41,35 @@ def load_json(path: Path) -> dict[str, Any]:
 
 def source_workspace_path(issue_identifier: str) -> Path:
     return DEFAULT_WORKSPACE_ROOT / issue_identifier
+
+
+def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -> Path:
+    source_workspace = source_workspace_path(source_issue["identifier"])
+    source_workspace = source_workspace.expanduser()
+    if source_workspace.exists():
+        resolved = source_workspace.resolve()
+    else:
+        parent = source_workspace.parent
+        pattern = f"{source_workspace.name}*"
+        candidates = sorted(candidate for candidate in parent.glob(pattern) if candidate.is_dir())
+        if not candidates:
+            raise SystemExit(f"Source workspace not found: {source_workspace}")
+        resolved = candidates[-1].resolve()
+
+    verifier = "feature-verify" if stage == "pr" else "pr-verify"
+    command = [sys.executable, "scripts/stage_handoff.py", verifier, "--workspace", str(resolved)]
+    if stage == "pr":
+        command.extend(["--repo", str(resolved)])
+    try:
+        subprocess.run(command, cwd=Path(__file__).resolve().parent.parent, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        stdout = (exc.stdout or "").strip()
+        details = stderr or stdout or str(exc)
+        raise SystemExit(
+            f"Source workspace for {source_issue['identifier']} does not satisfy {verifier}: {details}"
+        ) from None
+    return resolved
 
 
 def read_markdown(path: Path | None, text: str | None) -> str:
@@ -328,6 +358,42 @@ def find_project_issue_by_title(api_key: str, project_id: str, title: str) -> di
     return None
 
 
+def find_generated_followup_issue(
+    api_key: str,
+    project_id: str,
+    stage: str,
+    source_identifier: str,
+) -> dict[str, Any] | None:
+    query = """
+    query($projectId: String!) {
+      project(id: $projectId) {
+        issues(first: 250) {
+          nodes {
+            id
+            identifier
+            title
+            url
+            labels(first: 100) {
+              nodes { name }
+            }
+          }
+        }
+      }
+    }
+    """
+    data = graphql(api_key, query, {"projectId": project_id})
+    nodes = data["data"]["project"]["issues"]["nodes"]
+    expected_prefix = ("PR" if stage == "pr" else "Release") + f": {source_identifier} "
+    wanted_labels = {f"{ISSUE_TYPE_PREFIX}{stage}", FOLLOWUP_LABEL}
+    for node in nodes:
+        labels = {name.strip().lower() for name in issue_label_names(node)}
+        if not wanted_labels.issubset(labels):
+            continue
+        if node["title"].strip().startswith(expected_prefix):
+            return node
+    return None
+
+
 def issue_label_names(issue: dict[str, Any]) -> list[str]:
     return [node["name"] for node in issue["labels"]["nodes"]]
 
@@ -369,8 +435,9 @@ def followup_title(stage: str, source_issue: dict[str, Any], explicit_title: str
     return f"{prefix}: {source_issue['identifier']} {source_issue['title']}"
 
 
-def followup_description(stage: str, source_issue: dict[str, Any]) -> str:
-    source_workspace = str(source_workspace_path(source_issue["identifier"]))
+def followup_description(stage: str, source_issue: dict[str, Any], source_workspace: Path | None = None) -> str:
+    workspace_path = source_workspace_path(source_issue["identifier"]) if source_workspace is None else source_workspace
+    source_workspace_text = str(workspace_path)
     source_type = classify_issue_type(issue_label_names(source_issue))
     source_label_list = ", ".join(issue_label_names(source_issue)) or "none"
     common = [
@@ -386,7 +453,7 @@ def followup_description(stage: str, source_issue: dict[str, Any]) -> str:
         f"- URL: {source_issue['url']}",
         f"- Source type: {source_type}",
         f"- Source labels: {source_label_list}",
-        f"- Source workspace: `{source_workspace}`",
+        f"- Source workspace: `{source_workspace_text}`",
         "",
         "## Required Handoff Artifacts",
         "- `SYMPHONY_WORK_RESULT.md` from the source workspace is mandatory.",
@@ -436,12 +503,10 @@ def followup_description(stage: str, source_issue: dict[str, Any]) -> str:
                 "- GitHub PR command succeeds.",
                 "",
                 "## Source Handoff Requirements",
-                f"- Preferred path: read `{source_workspace}/SYMPHONY_HANDOFF.json` first for stage, transition, and cycle metadata.",
-                f"- Preferred path: read `{source_workspace}/SYMPHONY_STAGE_HANDOFF.md` before applying the diff.",
-                f"- Preferred path: apply `{source_workspace}/SYMPHONY_STAGE_PATCH.diff` into this workspace before rerunning validation.",
-                f"- If `{source_workspace}` no longer exists, recover from the latest archived workspace with the same issue prefix under `{DEFAULT_WORKSPACE_ROOT}` before falling back further.",
-                f"- Legacy fallback only when the source issue predates the handoff-artifact contract: inspect `{source_workspace}` directly, reconstruct the approved diff from that workspace, and document the recovery in this stage's `SYMPHONY_WORK_RESULT.md`.",
-                "- If neither the handoff artifacts nor a clear source-workspace diff are available, stop and move the issue to `Backlog` rather than inventing a new diff.",
+                f"- Required path: read `{source_workspace_text}/SYMPHONY_HANDOFF.json` first for stage, transition, and cycle metadata.",
+                f"- Required path: read `{source_workspace_text}/SYMPHONY_STAGE_HANDOFF.md` before applying the diff.",
+                f"- Required path: apply `{source_workspace_text}/SYMPHONY_STAGE_PATCH.diff` into this workspace before rerunning validation.",
+                "- If the source workspace does not satisfy the feature handoff contract, do not continue this PR stage. Return the source issue to implementation or operator handling first.",
                 "",
                 "## Release Validation",
                 "Use `n/a`. Release publication is owned by a separate release follow-up issue.",
@@ -489,11 +554,9 @@ def followup_description(stage: str, source_issue: dict[str, Any]) -> str:
                 "- `python scripts/release_guard.py --version X.Y.Z --require-release-notes`",
                 "",
                 "## Source Handoff Requirements",
-                f"- Preferred path: read `{source_workspace}/SYMPHONY_HANDOFF.json` first for stage, transition, and cycle metadata.",
-                f"- Preferred path: read `{source_workspace}/SYMPHONY_STAGE_HANDOFF.md` for the approved branch, commit, PR URL, and release notes context.",
-                f"- If `{source_workspace}` no longer exists, recover from the latest archived workspace with the same issue prefix under `{DEFAULT_WORKSPACE_ROOT}` before falling back further.",
-                f"- Legacy fallback only when the source PR issue predates the handoff-artifact contract: inspect `{source_workspace}` directly and recover the approved branch/commit/PR metadata from its git state plus `SYMPHONY_WORK_RESULT.md`.",
-                "- If the PR-stage handoff or recoverable source metadata does not clearly identify the publishable branch/commit, stop and move the issue to `Backlog`.",
+                f"- Required path: read `{source_workspace_text}/SYMPHONY_HANDOFF.json` first for stage, transition, and cycle metadata.",
+                f"- Required path: read `{source_workspace_text}/SYMPHONY_STAGE_HANDOFF.md` for the approved branch, commit, PR URL, and release notes context.",
+                "- If the source workspace does not satisfy the PR handoff contract, do not continue this release stage. Return the source issue to implementation or operator handling first.",
             ]
         )
     return "\n".join(common).strip()
@@ -508,6 +571,7 @@ def build_followup_input(
     extra_labels: list[str],
     create_missing_labels: bool,
 ) -> dict[str, Any]:
+    source_workspace = verify_followup_source_workspace(stage, source_issue)
     team_id = source_issue["team"]["id"]
     project = source_issue.get("project") or {}
     project_id = project.get("id")
@@ -518,7 +582,7 @@ def build_followup_input(
         "teamId": team_id,
         "projectId": project_id,
         "title": followup_title(stage, source_issue, explicit_title),
-        "description": followup_description(stage, source_issue),
+        "description": followup_description(stage, source_issue, source_workspace),
         "stateId": resolve_state_id(api_key, team_id, state),
         "labelIds": resolve_label_ids(api_key, team_id, label_names, create_missing_labels),
     }
@@ -644,12 +708,19 @@ def main() -> int:
             parse_csv(args.labels),
             args.create_missing_labels,
         )
-        existing = find_project_issue_by_title(api_key or "", input_payload["projectId"], input_payload["title"])
+        existing = find_generated_followup_issue(
+            api_key or "",
+            input_payload["projectId"],
+            stage,
+            source_issue["identifier"],
+        ) or find_project_issue_by_title(api_key or "", input_payload["projectId"], input_payload["title"])
         if existing:
             issue = update_issue(
                 api_key or "",
                 existing["id"],
                 {
+                    "title": input_payload["title"],
+                    "description": input_payload["description"],
                     "stateId": input_payload["stateId"],
                     "labelIds": input_payload["labelIds"],
                 },
