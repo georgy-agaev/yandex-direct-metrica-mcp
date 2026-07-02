@@ -31,7 +31,7 @@ def feature_handoff_payload(*, role: str, to_state: str, status: str, next_actor
         "issue": {"identifier": "GEO-12", "title": "Normalize search_serp"},
         "stage": {"type": "feature", "role": role},
         "transition": {"from_state": "In Progress", "to_state": to_state, "status": status},
-        "cycle": {"iteration": 1},
+        "cycle": {"iteration": 1, "max_iterations": 3},
         "summary": "Feature stage summary",
         "artifacts": [
             "SYMPHONY_WORK_RESULT.md",
@@ -51,7 +51,7 @@ def pr_handoff_payload(*, role: str, to_state: str, status: str, next_actor: str
         "issue": {"identifier": "GEO-13", "title": "PR: GEO-12"},
         "stage": {"type": "pr", "role": role},
         "transition": {"from_state": "In Progress", "to_state": to_state, "status": status},
-        "cycle": {"iteration": 2},
+        "cycle": {"iteration": 2, "max_iterations": 3},
         "summary": "PR stage summary",
         "artifacts": [
             "SYMPHONY_WORK_RESULT.md",
@@ -153,7 +153,7 @@ def test_review_verify_blocked_requires_blockers(tmp_path: Path) -> None:
             "issue": {"identifier": "GEO-12", "title": "Normalize search_serp"},
             "stage": {"type": "feature", "role": "review"},
             "transition": {"from_state": "In Review", "to_state": "Backlog", "status": "blocked"},
-            "cycle": {"iteration": 2},
+            "cycle": {"iteration": 2, "max_iterations": 3},
             "summary": "Missing operator evidence",
             "artifacts": ["SYMPHONY_WORK_RESULT.md", "SYMPHONY_HANDOFF.json"],
             "validation": {"passed": ["pytest -q tests/test_search_serp.py"]},
@@ -188,3 +188,49 @@ def test_apply_feature_patch_recovers_archived_workspace(tmp_path: Path) -> None
 
     stage_handoff.apply_feature_patch(root / "GEO-12", repo)
     assert (repo / "README.md").read_text(encoding="utf-8") == "base\nfeature\n"
+
+
+def test_verify_feature_requires_max_iterations(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+
+    updated = repo / "README.md"
+    updated.write_text("base\nfeature\n", encoding="utf-8")
+    patch = subprocess.run(
+        ["git", "diff", "--binary", "--", "README.md"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    updated.write_text("base\n", encoding="utf-8")
+
+    payload = feature_handoff_payload(role="implementation", to_state="In Review", status="needs_review")
+    payload["cycle"] = {"iteration": 1}
+
+    workspace = tmp_path / "workspace"
+    make_feature_workspace(workspace, patch, payload=payload)
+
+    with pytest.raises(SystemExit, match="max_iterations"):
+        stage_handoff.verify_feature(workspace, repo)
+
+
+def test_verify_review_rejects_needs_changes_at_max_iterations(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    make_feature_workspace(
+        workspace,
+        patch_body="",
+        payload={
+            **feature_handoff_payload(
+                role="review",
+                to_state="Todo",
+                status="needs_changes",
+                next_actor="implementation",
+            ),
+            "cycle": {"iteration": 3, "max_iterations": 3},
+        },
+    )
+
+    with pytest.raises(SystemExit, match="use blocked/operator instead of needs_changes"):
+        stage_handoff.verify_review(workspace, "feature", "needs_changes")

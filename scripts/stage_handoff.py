@@ -21,6 +21,7 @@ FEATURE_REQUIRED = COMMON_REQUIRED + (
 )
 PR_REQUIRED = COMMON_REQUIRED + ("SYMPHONY_STAGE_HANDOFF.md",)
 SCHEMA_VERSION = 1
+DEFAULT_MAX_ITERATIONS = 3
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,6 +94,13 @@ def require_list(payload: dict, key: str) -> list:
     return value
 
 
+def require_int(payload: dict, key: str, *, minimum: int) -> int:
+    value = payload.get(key)
+    if not isinstance(value, int) or value < minimum:
+        raise SystemExit(f"SYMPHONY_HANDOFF.json must contain integer `{key}` >= {minimum}")
+    return value
+
+
 def verify_common_handoff(
     workspace: Path,
     *,
@@ -131,9 +139,10 @@ def verify_common_handoff(
         )
 
     cycle = require_dict(handoff, "cycle")
-    iteration = cycle.get("iteration")
-    if not isinstance(iteration, int) or iteration < 1:
-        raise SystemExit("SYMPHONY_HANDOFF.json cycle.iteration must be integer >= 1")
+    iteration = require_int(cycle, "iteration", minimum=1)
+    max_iterations = require_int(cycle, "max_iterations", minimum=1)
+    if iteration > max_iterations:
+        raise SystemExit("SYMPHONY_HANDOFF.json cycle.iteration must not exceed cycle.max_iterations")
 
     require_string(handoff, "summary")
     artifacts = require_list(handoff, "artifacts")
@@ -155,6 +164,8 @@ def verify_common_handoff(
         raise SystemExit("SYMPHONY_HANDOFF.json blockers must be an array")
     if actual_status == "blocked" and not blockers:
         raise SystemExit("Blocked handoff must include at least one blocker")
+    if role == "review" and actual_status == "needs_changes" and iteration >= max_iterations:
+        raise SystemExit("Review handoff reached cycle.max_iterations; use blocked/operator instead of needs_changes")
 
     for artifact in artifacts:
         if not isinstance(artifact, str) or not artifact.strip():

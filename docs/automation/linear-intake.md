@@ -41,6 +41,7 @@ Recommended path:
 - generic investigation: `docs/automation/templates/linear-investigation.md`
 - generic release: `docs/automation/templates/linear-release.md`
 - Marketing2025 workflow: `docs/automation/templates/linear-marketing2025-workflow.md`
+- universal handoff shape: `docs/automation/templates/SYMPHONY_HANDOFF.template.json`
 
 ## Required Intake Fields
 
@@ -56,6 +57,7 @@ Every Symphony-managed issue should explicitly define:
 - `Feature Validation`
 - `PR Validation`
 - `Release Validation`
+- `Cycle Policy`
 
 Rule:
 
@@ -64,6 +66,9 @@ Rule:
 - later-stage validation must not be used to reject an earlier stage.
 - if a required capability or external input is missing, the issue must move to `Backlog`, not loop in `Todo`.
 - unless explicitly required in `Feature Validation`, repo-wide docs, changelog, PR copy, release notes, and downstream handoff documents belong to PR/release follow-up stages rather than the feature stage.
+- every cross-agent transition must emit `SYMPHONY_HANDOFF.json` using the repo template shape.
+- `Cycle Policy` should define the retry budget, or the workflow default of `max_iterations = 3` will apply.
+- once `cycle.max_iterations` is exhausted, review must stop the loop and move the issue to `Backlog` with an explicit blocker handoff.
 
 `Required Capabilities` should explicitly answer:
 

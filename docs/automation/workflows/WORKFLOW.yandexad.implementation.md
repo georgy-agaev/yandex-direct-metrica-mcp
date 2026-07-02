@@ -49,38 +49,43 @@ General rules:
 2. Work only inside this isolated workspace.
 3. Keep changes scoped to the current issue type.
 4. At the start of every turn, if `SYMPHONY_HANDOFF.json` already exists, read it first. Treat it as the authoritative cycle memory from the previous pass.
-5. Write `SYMPHONY_WORK_RESULT.md`.
-6. Write portable stage handoff artifacts whenever a later stage must continue the work from a fresh clone:
+5. Use `docs/automation/templates/SYMPHONY_HANDOFF.template.json` as the canonical shape for every handoff update. Do not invent ad hoc keys.
+6. Write `SYMPHONY_WORK_RESULT.md`.
+7. Write portable stage handoff artifacts whenever a later stage must continue the work from a fresh clone:
    - universal transition contract: `SYMPHONY_HANDOFF.json` for every state exit;
    - `SYMPHONY_STAGE_HANDOFF.md` for feature and PR issues;
    - `SYMPHONY_STAGE_PATCH.diff` for feature issues.
-7. Without a valid `SYMPHONY_HANDOFF.json`, do not move the issue to `In Review`, `Todo`, `Backlog`, or `Done`.
-8. Leave one concise Linear comment with the stage result.
-9. Move the issue to `In Review` when the stage completes.
-10. Execute only the validation section for the current stage from the issue body:
+8. Without a valid `SYMPHONY_HANDOFF.json`, do not move the issue to `In Review`, `Todo`, `Backlog`, or `Done`.
+9. `cycle.max_iterations` is mandatory in `SYMPHONY_HANDOFF.json`. Default to `3` unless the issue body explicitly sets another limit.
+10. Never write a handoff with `cycle.iteration > cycle.max_iterations`.
+11. Leave one concise Linear comment with the stage result.
+12. Move the issue to `In Review` when the stage completes.
+13. Execute only the validation section for the current stage from the issue body:
    - feature issue -> `Feature Validation`
    - PR issue -> `PR Validation`
    - release issue -> `Release Validation`
-11. Do not pull requirements from later stages when deciding whether the current stage is complete.
-12. If the current stage is blocked by missing external credentials, missing operator input, or required manual evidence that is impossible in the current environment:
+14. Do not pull requirements from later stages when deciding whether the current stage is complete.
+15. If the current stage is blocked by missing external credentials, missing operator input, or required manual evidence that is impossible in the current environment:
    - write the blocker into `SYMPHONY_WORK_RESULT.md`;
    - write/update `SYMPHONY_HANDOFF.json` with:
      - `stage.role = implementation`
      - `transition.to_state = Backlog`
      - `transition.status = blocked`
      - current `cycle.iteration`
+     - current `cycle.max_iterations`
      - concise blocker summary
      - `next_actor = operator` or `implementation`
    - leave one concise Linear blocker comment;
    - move the issue to `Backlog`;
    - stop the turn.
-13. Use `Todo` only for code/test/doc defects that another implementation pass can fix immediately.
-14. Before declaring a browser/manual evidence blocker, inspect:
+16. Use `Todo` only for code/test/doc defects that another implementation pass can fix immediately.
+17. Before declaring a browser/manual evidence blocker, inspect:
    - current Linear issue comments;
    - `SYMPHONY_WORK_RESULT.md`;
    - repo-local validation/session artifacts under `docs/` or `docs/sessions/`.
    If operator evidence for the required check is already present there, summarize it in `SYMPHONY_WORK_RESULT.md` and continue instead of re-blocking the issue.
-15. Treat repository-wide documentation, changelog, release notes, PR copy, and downstream client handoff documents as later-stage work unless the issue body explicitly requires them in `Feature Validation`.
+18. Treat repository-wide documentation, changelog, release notes, PR copy, and downstream client handoff documents as later-stage work unless the issue body explicitly requires them in `Feature Validation`.
+19. If the incoming handoff already shows `cycle.iteration == cycle.max_iterations`, you may do one final implementation pass for that cycle, but any unresolved result must be escalated by review to `Backlog` rather than starting another retry loop.
 
 ## Feature issue
 
@@ -107,7 +112,8 @@ Do:
   - `transition.from_state`
   - `transition.to_state = In Review`
   - `transition.status = needs_review`
-  - `cycle.iteration` (increment when resuming after review feedback)
+  - `cycle.iteration` (increment only when starting a new implementation retry cycle)
+  - `cycle.max_iterations`
   - concise summary of what changed
   - artifact list including `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`, `SYMPHONY_STAGE_HANDOFF.md`, `SYMPHONY_STAGE_PATCH.diff`
   - validation commands that passed
@@ -167,6 +173,7 @@ Default fallback only when the issue body does not define `PR Validation`:
   - `transition.to_state = In Review`
   - `transition.status = needs_review`
   - current `cycle.iteration`
+  - current `cycle.max_iterations`
   - concise summary
   - artifact list including `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`, `SYMPHONY_STAGE_HANDOFF.md`
   - validation commands that passed
@@ -211,6 +218,7 @@ Default fallback only when the issue body does not define `Release Validation`:
   - `transition.to_state = In Review`
   - `transition.status = needs_review`
   - current `cycle.iteration`
+  - current `cycle.max_iterations`
   - concise summary
   - artifact list including `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`
   - validation commands that passed

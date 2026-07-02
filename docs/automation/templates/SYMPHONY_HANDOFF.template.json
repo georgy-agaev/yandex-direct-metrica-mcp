@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "issue": {
+    "identifier": "__ISSUE_ID__",
+    "title": "__ISSUE_TITLE__"
+  },
+  "stage": {
+    "type": "feature",
+    "role": "implementation"
+  },
+  "transition": {
+    "from_state": "In Progress",
+    "to_state": "In Review",
+    "status": "needs_review"
+  },
+  "cycle": {
+    "iteration": 1,
+    "max_iterations": 3
+  },
+  "summary": "__CONCISE_SUMMARY__",
+  "artifacts": [
+    "SYMPHONY_WORK_RESULT.md",
+    "SYMPHONY_HANDOFF.json"
+  ],
+  "validation": {
+    "passed": [
+      "__VALIDATION_COMMAND__"
+    ]
+  },
+  "next_actor": "review",
+  "blockers": []
+}
