@@ -45,7 +45,9 @@ def test_followup_description_for_pr_contains_pr_contract() -> None:
     assert "## Execution Profile" in body
     assert "- Issue Class: feature" in body
     assert "- Source workspace: `/Users/georgyagaev/Projects/Symphony_yaad/workspaces/GEO-7`" in body
+    assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_PATCH.diff" in body
+    assert "latest archived workspace with the same issue prefix" in body
     assert "## PR Validation" in body
     assert "GitHub PR command succeeds." in body
     assert "## Release Validation" in body
@@ -60,6 +62,7 @@ def test_followup_description_for_release_contains_release_contract() -> None:
     assert "## Execution Profile" in body
     assert "- Issue Class: release" in body
     assert "- Risk: high" in body
+    assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_HANDOFF.md" in body
     assert "GitHub Release exists." in body
     assert "## Release Validation" in body

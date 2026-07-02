@@ -48,29 +48,39 @@ General rules:
 1. If the issue is `Todo`, move it to `In Progress`.
 2. Work only inside this isolated workspace.
 3. Keep changes scoped to the current issue type.
-4. Write `SYMPHONY_WORK_RESULT.md`.
-5. Write portable stage handoff artifacts whenever a later stage must continue the work from a fresh clone:
+4. At the start of every turn, if `SYMPHONY_HANDOFF.json` already exists, read it first. Treat it as the authoritative cycle memory from the previous pass.
+5. Write `SYMPHONY_WORK_RESULT.md`.
+6. Write portable stage handoff artifacts whenever a later stage must continue the work from a fresh clone:
+   - universal transition contract: `SYMPHONY_HANDOFF.json` for every state exit;
    - `SYMPHONY_STAGE_HANDOFF.md` for feature and PR issues;
    - `SYMPHONY_STAGE_PATCH.diff` for feature issues.
-6. Leave one concise Linear comment with the stage result.
-7. Move the issue to `In Review` when the stage completes.
-8. Execute only the validation section for the current stage from the issue body:
+7. Without a valid `SYMPHONY_HANDOFF.json`, do not move the issue to `In Review`, `Todo`, `Backlog`, or `Done`.
+8. Leave one concise Linear comment with the stage result.
+9. Move the issue to `In Review` when the stage completes.
+10. Execute only the validation section for the current stage from the issue body:
    - feature issue -> `Feature Validation`
    - PR issue -> `PR Validation`
    - release issue -> `Release Validation`
-9. Do not pull requirements from later stages when deciding whether the current stage is complete.
-10. If the current stage is blocked by missing external credentials, missing operator input, or required manual evidence that is impossible in the current environment:
+11. Do not pull requirements from later stages when deciding whether the current stage is complete.
+12. If the current stage is blocked by missing external credentials, missing operator input, or required manual evidence that is impossible in the current environment:
    - write the blocker into `SYMPHONY_WORK_RESULT.md`;
+   - write/update `SYMPHONY_HANDOFF.json` with:
+     - `stage.role = implementation`
+     - `transition.to_state = Backlog`
+     - `transition.status = blocked`
+     - current `cycle.iteration`
+     - concise blocker summary
+     - `next_actor = operator` or `implementation`
    - leave one concise Linear blocker comment;
    - move the issue to `Backlog`;
    - stop the turn.
-11. Use `Todo` only for code/test/doc defects that another implementation pass can fix immediately.
-12. Before declaring a browser/manual evidence blocker, inspect:
+13. Use `Todo` only for code/test/doc defects that another implementation pass can fix immediately.
+14. Before declaring a browser/manual evidence blocker, inspect:
    - current Linear issue comments;
    - `SYMPHONY_WORK_RESULT.md`;
    - repo-local validation/session artifacts under `docs/` or `docs/sessions/`.
    If operator evidence for the required check is already present there, summarize it in `SYMPHONY_WORK_RESULT.md` and continue instead of re-blocking the issue.
-13. Treat repository-wide documentation, changelog, release notes, PR copy, and downstream client handoff documents as later-stage work unless the issue body explicitly requires them in `Feature Validation`.
+15. Treat repository-wide documentation, changelog, release notes, PR copy, and downstream client handoff documents as later-stage work unless the issue body explicitly requires them in `Feature Validation`.
 
 ## Feature issue
 
@@ -89,6 +99,19 @@ Do:
   - name it `SYMPHONY_STAGE_PATCH.diff`;
   - make it applicable from a fresh clone on `main`;
   - document the exact apply command in `SYMPHONY_STAGE_HANDOFF.md`.
+- before moving a feature issue to `In Review`, write `SYMPHONY_HANDOFF.json` with at least:
+  - `schema_version = 1`
+  - issue identifier and title
+  - `stage.type = feature`
+  - `stage.role = implementation`
+  - `transition.from_state`
+  - `transition.to_state = In Review`
+  - `transition.status = needs_review`
+  - `cycle.iteration` (increment when resuming after review feedback)
+  - concise summary of what changed
+  - artifact list including `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`, `SYMPHONY_STAGE_HANDOFF.md`, `SYMPHONY_STAGE_PATCH.diff`
+  - validation commands that passed
+  - `next_actor = review`
 - before moving a feature issue to `In Review`, validate the handoff artifacts with:
   - `python scripts/stage_handoff.py feature-verify --workspace . --repo .`
 - `SYMPHONY_STAGE_HANDOFF.md` for a feature issue must include:
@@ -130,6 +153,7 @@ Default fallback only when the issue body does not define `PR Validation`:
 - read the source-stage handoff and reproduce the approved diff before rerunning gates;
 - use the source workspace path named in the issue body together with:
   - `python scripts/stage_handoff.py apply-feature-patch --source-workspace <source-workspace> --repo .`
+- if the exact source workspace path no longer exists, allow `python scripts/stage_handoff.py apply-feature-patch` to recover from the latest archived workspace with the same issue prefix under the same workspace root;
 - if the source issue predates the handoff-artifact contract and the issue body names a source workspace path, you may recover the approved diff directly from that source workspace once and must document the recovery in `SYMPHONY_WORK_RESULT.md`;
 - if neither handoff artifacts nor a clear source-workspace recovery path exist, move the issue to `Backlog` instead of publishing a guessed diff;
 - create or reuse the suggested issue branch;
@@ -137,6 +161,16 @@ Default fallback only when the issue body does not define `PR Validation`:
 - push the branch to GitHub;
 - create or update the GitHub PR;
 - comment the PR URL back to Linear.
+- before moving a PR issue to `In Review`, write `SYMPHONY_HANDOFF.json` with:
+  - `stage.type = pr`
+  - `stage.role = implementation`
+  - `transition.to_state = In Review`
+  - `transition.status = needs_review`
+  - current `cycle.iteration`
+  - concise summary
+  - artifact list including `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`, `SYMPHONY_STAGE_HANDOFF.md`
+  - validation commands that passed
+  - `next_actor = review`
 - before moving a PR issue to `In Review`, write `SYMPHONY_STAGE_HANDOFF.md` containing:
   - branch name;
   - head commit SHA;
@@ -171,6 +205,16 @@ Default fallback only when the issue body does not define `Release Validation`:
 - `python scripts/live_validation.py --suite direct,metrica,wordstat,search`
 - `python scripts/release_guard.py --version X.Y.Z --require-release-notes`
 - finalize release metadata if needed;
+- before moving a release issue to `In Review`, write `SYMPHONY_HANDOFF.json` with:
+  - `stage.type = release`
+  - `stage.role = implementation`
+  - `transition.to_state = In Review`
+  - `transition.status = needs_review`
+  - current `cycle.iteration`
+  - concise summary
+  - artifact list including `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`
+  - validation commands that passed
+  - `next_actor = review`
 - commit and push the release commit if required;
 - create and push tags:
   - `vX.Y.Z`
