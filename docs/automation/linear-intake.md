@@ -168,6 +168,7 @@ Both commands:
 - require portable handoff artifacts from the previous stage:
   - feature -> PR: `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_STAGE_HANDOFF.md`, `SYMPHONY_STAGE_PATCH.diff`
   - PR -> release: `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_STAGE_HANDOFF.md`
+- fail closed for PR -> release unless the PR-stage handoff explicitly records `merge status: merged` and a merge commit SHA
 - comment the created follow-up link back onto the source issue.
 
 Do not create a follow-up issue until those artifacts exist in the source workspace.

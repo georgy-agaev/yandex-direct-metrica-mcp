@@ -19,13 +19,15 @@ hooks:
   after_create: |
     git clone --depth 1 https://github.com/georgy-agaev/yandex-direct-metrica-mcp.git .
     python scripts/trust_symphony_workspace.py --workspace .
+  before_remove: |
+    python scripts/archive_stage_handoff.py
 agent:
   max_concurrent_agents: 1
   max_turns: 3
 codex:
   command: /Applications/Codex.app/Contents/Resources/codex --model gpt-5.4 --config shell_environment_policy.inherit=all app-server
   approval_policy: never
-  thread_sandbox: workspace-write
+  thread_sandbox: danger-full-access
   turn_sandbox_policy:
     type: workspaceWrite
     networkAccess: true
@@ -86,6 +88,14 @@ General rules:
    If operator evidence for the required check is already present there, summarize it in `SYMPHONY_WORK_RESULT.md` and continue instead of re-blocking the issue.
 18. Treat repository-wide documentation, changelog, release notes, PR copy, and downstream client handoff documents as later-stage work unless the issue body explicitly requires them in `Feature Validation`.
 19. If the incoming handoff already shows `cycle.iteration == cycle.max_iterations`, you may do one final implementation pass for that cycle, but any unresolved result must be escalated by review to `Backlog` rather than starting another retry loop.
+20. If the incoming handoff already shows `transition.status = blocked` and `next_actor = operator`, do not rerun the same stage blindly:
+   - first check whether the blocker is clearly resolved in the current environment or issue comments;
+   - if it is still unresolved, refresh the blocker note and move the issue back to `Backlog` immediately;
+   - do not spend multiple turns rediscovering the same blocker.
+21. If the current issue is a reopened feature issue, remove stale generated follow-up issues before doing new implementation work:
+   - run `python scripts/linear_issue.py cleanup-followups --issue-id {{ issue.identifier }}`;
+   - this cleanup is idempotent;
+   - stale PR/release follow-ups from an earlier failed cycle must be deleted, not reused.
 
 ## Feature issue
 
@@ -166,6 +176,10 @@ Default fallback only when the issue body does not define `PR Validation`:
 - commit the workspace changes;
 - push the branch to GitHub;
 - create or update the GitHub PR;
+- if the PR issue carries `release-required`, do not treat "PR exists" as completion:
+  - verify GitHub checks for that PR, not only local commands;
+  - fix any failing CI defect before review;
+  - merge the PR only after checks are green and the branch is publishable;
 - comment the PR URL back to Linear.
 - before moving a PR issue to `In Review`, write `SYMPHONY_HANDOFF.json` with:
   - `stage.type = pr`
@@ -182,6 +196,7 @@ Default fallback only when the issue body does not define `PR Validation`:
   - branch name;
   - head commit SHA;
   - PR URL;
+  - for `release-required` PR issues: merge status and merge commit SHA;
   - validation commands that passed;
   - any release-facing notes the release stage must preserve.
 - before moving a PR issue to `In Review`, validate the handoff metadata with:

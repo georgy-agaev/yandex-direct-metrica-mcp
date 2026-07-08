@@ -119,6 +119,29 @@ Every Symphony-managed issue should declare:
 
 This prevents hidden assumptions about browser access, live provider access, and manual operator evidence.
 
+## 6c. Make stage handoff mandatory
+
+Every Symphony-managed issue must be able to move between stages only through a standard handoff artifact set.
+
+Required rule:
+
+- no state transition without a valid `SYMPHONY_HANDOFF.json`
+
+When the stage produces code or metadata that a later stage must continue from a fresh clone, the issue must also require:
+
+- feature stage: `SYMPHONY_STAGE_HANDOFF.md` and `SYMPHONY_STAGE_PATCH.diff`
+- PR stage: `SYMPHONY_STAGE_HANDOFF.md`
+- release stage: stage-complete `SYMPHONY_HANDOFF.json`
+
+The issue body should make the cycle contract explicit:
+
+- `Retry Budget`: default `3` unless stated otherwise
+- `Handoff Required`: `yes`
+
+This prevents silent state flips, missing review context, and infinite loops after partial work.
+
+If a feature issue is reopened after a PR or release follow-up was already generated, those generated follow-up issues must be deleted before the next implementation cycle starts. Do not reuse stale follow-up issues across feature-stage retries.
+
 If browser-visible or operator evidence is allowed, the issue should also state which evidence channels are acceptable:
 
 - agent-owned browser artifact

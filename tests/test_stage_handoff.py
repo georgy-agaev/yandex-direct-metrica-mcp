@@ -190,6 +190,18 @@ def test_apply_feature_patch_recovers_archived_workspace(tmp_path: Path) -> None
     assert (repo / "README.md").read_text(encoding="utf-8") == "base\nfeature\n"
 
 
+def test_resolve_source_workspace_prefers_candidate_with_feature_artifacts(tmp_path: Path) -> None:
+    root = tmp_path / "workspaces"
+    root.mkdir()
+    stale = root / "GEO-12.stale-2026-07-02T0800"
+    stale.mkdir()
+    archived = root / "GEO-12.handoff-2026-07-08T180401Z"
+    make_feature_workspace(archived, patch_body="")
+
+    resolved = stage_handoff.resolve_source_workspace(root / "GEO-12")
+    assert resolved == archived.resolve()
+
+
 def test_verify_feature_requires_max_iterations(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

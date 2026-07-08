@@ -1,3 +1,5 @@
+import pytest
+
 from scripts import linear_issue
 
 
@@ -13,6 +15,13 @@ def _issue(labels: list[str]) -> dict:
         "project": {"id": "project-id", "name": "Yandex.AD"},
         "labels": {"nodes": [{"id": f"id-{idx}", "name": label} for idx, label in enumerate(labels)]},
     }
+
+
+def _issue_with_identifier(identifier: str, labels: list[str]) -> dict:
+    issue = _issue(labels)
+    issue["identifier"] = identifier
+    issue["url"] = f"https://linear.app/example/{identifier}"
+    return issue
 
 
 def test_classify_issue_type_defaults_to_feature() -> None:
@@ -41,13 +50,17 @@ def test_inherited_followup_labels_replace_issue_type_and_preserve_context() -> 
 
 
 def test_followup_description_for_pr_contains_pr_contract() -> None:
-    body = linear_issue.followup_description("pr", _issue(["symphony", "issue-type:feature"]))
+    body = linear_issue.followup_description(
+        "pr",
+        _issue(["symphony", "issue-type:feature"]),
+        linear_issue.Path("/tmp/symphony/GEO-7"),
+    )
     assert "## Execution Profile" in body
     assert "- Issue Class: feature" in body
-    assert "- Source workspace: `/Users/georgyagaev/Projects/Symphony_yaad/workspaces/GEO-7`" in body
+    assert "- Source workspace: `/tmp/symphony/GEO-7`" in body
     assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_PATCH.diff" in body
-    assert "latest archived workspace with the same issue prefix" in body
+    assert "do not continue this PR stage" in body
     assert "## PR Validation" in body
     assert "GitHub PR command succeeds." in body
     assert "## Release Validation" in body
@@ -58,6 +71,7 @@ def test_followup_description_for_release_contains_release_contract() -> None:
     body = linear_issue.followup_description(
         "release",
         _issue(["symphony", "issue-type:pr", "release-required"]),
+        linear_issue.Path("/tmp/symphony/GEO-8"),
     )
     assert "## Execution Profile" in body
     assert "- Issue Class: release" in body
@@ -65,9 +79,42 @@ def test_followup_description_for_release_contains_release_contract() -> None:
     assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_HANDOFF.md" in body
     assert "GitHub Release exists." in body
+    assert "The source PR is already merged before release publication starts." in body
+    assert "merge status: merged" in body
     assert "## Release Validation" in body
     assert "python scripts/live_validation.py --suite direct,metrica,wordstat,search" in body
     assert "No new feature work." in body
+
+
+def test_verify_release_source_metadata_requires_merged_pr(tmp_path) -> None:
+    workspace = tmp_path / "GEO-15"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+        "branch: issue/geo-15\ncommit: abc123\nPR URL: https://example.test/pr/7\nmerge status: open\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="missing metadata: merge status: merged, merge commit:"):
+        linear_issue.verify_release_source_metadata(workspace)
+
+
+def test_verify_release_source_metadata_accepts_merged_pr(tmp_path) -> None:
+    workspace = tmp_path / "GEO-15"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+        "\n".join(
+            [
+                "branch: issue/geo-15",
+                "commit: abc123",
+                "PR URL: https://example.test/pr/7",
+                "merge status: merged",
+                "merge commit: def456",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    linear_issue.verify_release_source_metadata(workspace)
 
 
 def test_source_workspace_path_uses_env_override(monkeypatch) -> None:
@@ -78,3 +125,249 @@ def test_source_workspace_path_uses_env_override(monkeypatch) -> None:
         assert str(linear_issue.source_workspace_path("GEO-99")) == "/tmp/symphony-workspaces/GEO-99"
     finally:
         linear_issue.DEFAULT_WORKSPACE_ROOT = original
+
+
+def test_find_generated_followup_issue_prefers_stage_and_source_identifier(monkeypatch) -> None:
+    def fake_graphql(_api_key: str, _query: str, _variables: dict) -> dict:
+        return {
+            "data": {
+                "project": {
+                    "issues": {
+                        "nodes": [
+                            {
+                                "id": "1",
+                                "identifier": "GEO-13",
+                                "title": "PR: GEO-12 Old title",
+                                "url": "https://linear.app/example/GEO-13",
+                                "labels": {
+                                    "nodes": [
+                                        {"name": "generated-followup"},
+                                        {"name": "issue-type:pr"},
+                                        {"name": "symphony"},
+                                    ]
+                                },
+                            },
+                            {
+                                "id": "2",
+                                "identifier": "GEO-14",
+                                "title": "PR: GEO-99 Other title",
+                                "url": "https://linear.app/example/GEO-14",
+                                "labels": {
+                                    "nodes": [
+                                        {"name": "generated-followup"},
+                                        {"name": "issue-type:pr"},
+                                    ]
+                                },
+                            },
+                        ]
+                    }
+                }
+            }
+        }
+
+    monkeypatch.setattr(linear_issue, "graphql", fake_graphql)
+    found = linear_issue.find_generated_followup_issue("token", "project-id", "pr", "GEO-12")
+    assert found is not None
+    assert found["identifier"] == "GEO-13"
+
+
+def test_find_generated_followup_issues_returns_matching_pr_and_release(monkeypatch) -> None:
+    def fake_graphql(_api_key: str, _query: str, _variables: dict) -> dict:
+        return {
+            "data": {
+                "project": {
+                    "issues": {
+                        "nodes": [
+                            {
+                                "id": "1",
+                                "identifier": "GEO-13",
+                                "title": "PR: GEO-12 Old title",
+                                "url": "https://linear.app/example/GEO-13",
+                                "state": {"name": "Backlog"},
+                                "labels": {
+                                    "nodes": [
+                                        {"name": "generated-followup"},
+                                        {"name": "issue-type:pr"},
+                                    ]
+                                },
+                            },
+                            {
+                                "id": "2",
+                                "identifier": "GEO-14",
+                                "title": "Release: GEO-12 Old title",
+                                "url": "https://linear.app/example/GEO-14",
+                                "state": {"name": "Backlog"},
+                                "labels": {
+                                    "nodes": [
+                                        {"name": "generated-followup"},
+                                        {"name": "issue-type:release"},
+                                    ]
+                                },
+                            },
+                            {
+                                "id": "3",
+                                "identifier": "GEO-15",
+                                "title": "PR: GEO-99 Other title",
+                                "url": "https://linear.app/example/GEO-15",
+                                "state": {"name": "Backlog"},
+                                "labels": {
+                                    "nodes": [
+                                        {"name": "generated-followup"},
+                                        {"name": "issue-type:pr"},
+                                    ]
+                                },
+                            },
+                        ]
+                    }
+                }
+            }
+        }
+
+    monkeypatch.setattr(linear_issue, "graphql", fake_graphql)
+
+    found = linear_issue.find_generated_followup_issues("token", "project-id", "GEO-12", ["pr", "release"])
+    assert [node["identifier"] for node in found] == ["GEO-13", "GEO-14"]
+
+
+def test_verify_followup_source_workspace_fails_when_handoff_is_invalid(monkeypatch, tmp_path) -> None:
+    workspace = tmp_path / "GEO-7"
+    workspace.mkdir()
+    monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", tmp_path)
+
+    def fake_run(*_args, **_kwargs):
+        raise linear_issue.subprocess.CalledProcessError(
+            1,
+            ["python", "scripts/stage_handoff.py"],
+            stderr="Missing handoff artifacts in workspace",
+        )
+
+    monkeypatch.setattr(linear_issue.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit, match="does not satisfy review-verify"):
+        linear_issue.verify_followup_source_workspace("pr", _issue(["symphony", "issue-type:feature"]))
+
+
+def test_verify_followup_source_workspace_uses_review_verify_for_pr(monkeypatch, tmp_path) -> None:
+    workspace = tmp_path / "GEO-7"
+    workspace.mkdir()
+    monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", tmp_path)
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["cwd"] = kwargs.get("cwd")
+        return None
+
+    monkeypatch.setattr(linear_issue.subprocess, "run", fake_run)
+
+    resolved = linear_issue.verify_followup_source_workspace(
+        "pr",
+        _issue_with_identifier("GEO-7", ["symphony", "issue-type:feature"]),
+    )
+
+    assert resolved == workspace.resolve()
+    assert captured["command"] == [
+        linear_issue.sys.executable,
+        "scripts/stage_handoff.py",
+        "review-verify",
+        "--workspace",
+        str(workspace.resolve()),
+        "--stage",
+        "feature",
+        "--outcome",
+        "approved",
+    ]
+
+
+def test_verify_followup_source_workspace_uses_review_verify_for_release(monkeypatch, tmp_path) -> None:
+    workspace = tmp_path / "GEO-8"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+        "\n".join(
+            [
+                "branch: issue/geo-8",
+                "commit: abc123",
+                "PR URL: https://example.test/pr/8",
+                "merge status: merged",
+                "merge commit: def456",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", tmp_path)
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["cwd"] = kwargs.get("cwd")
+        return None
+
+    monkeypatch.setattr(linear_issue.subprocess, "run", fake_run)
+
+    resolved = linear_issue.verify_followup_source_workspace(
+        "release",
+        _issue_with_identifier("GEO-8", ["symphony", "issue-type:pr"]),
+    )
+
+    assert resolved == workspace.resolve()
+    assert captured["command"] == [
+        linear_issue.sys.executable,
+        "scripts/stage_handoff.py",
+        "review-verify",
+        "--workspace",
+        str(workspace.resolve()),
+        "--stage",
+        "pr",
+        "--outcome",
+        "approved",
+    ]
+
+
+def test_verify_followup_source_workspace_prefers_valid_archived_candidate(monkeypatch, tmp_path) -> None:
+    stale = tmp_path / "GEO-12.stale-2026-07-02T0800"
+    stale.mkdir()
+    archived = tmp_path / "GEO-12.handoff-2026-07-08T180401Z"
+    archived.mkdir()
+    monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", tmp_path)
+    seen: list[str] = []
+
+    def fake_run(command, **kwargs):
+        workspace = command[command.index("--workspace") + 1]
+        seen.append(workspace)
+        if workspace == str(stale.resolve()):
+            raise linear_issue.subprocess.CalledProcessError(1, command, stderr="missing handoff")
+        return None
+
+    monkeypatch.setattr(linear_issue.subprocess, "run", fake_run)
+
+    resolved = linear_issue.verify_followup_source_workspace(
+        "pr",
+        _issue_with_identifier("GEO-12", ["symphony", "issue-type:feature"]),
+    )
+
+    assert resolved == archived.resolve()
+    assert seen == [str(archived.resolve())]
+
+
+def test_cleanup_generated_followup_issues_deletes_matches(monkeypatch) -> None:
+    source_issue = {
+        "identifier": "GEO-12",
+        "project": {"id": "project-id"},
+    }
+    matches = [
+        {"id": "1", "identifier": "GEO-13", "title": "PR: GEO-12 Example"},
+        {"id": "2", "identifier": "GEO-14", "title": "Release: GEO-12 Example"},
+    ]
+    deleted: list[tuple[str, bool]] = []
+
+    monkeypatch.setattr(linear_issue, "find_generated_followup_issues", lambda *_args, **_kwargs: matches)
+    monkeypatch.setattr(
+        linear_issue,
+        "delete_issue",
+        lambda _api_key, issue_id, permanently_delete=False: deleted.append((issue_id, permanently_delete)) or True,
+    )
+
+    result = linear_issue.cleanup_generated_followup_issues("token", source_issue, ["pr", "release"])
+
+    assert result == matches
+    assert deleted == [("1", False), ("2", False)]
