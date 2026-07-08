@@ -130,6 +130,25 @@ def test_normalize_search_html_prefers_visible_ad_domain_over_redirect() -> None
     assert out["ads"][0]["block"] == "top"
 
 
+def test_normalize_search_html_ignores_date_like_visible_text_before_domain() -> None:
+    raw_html = """
+    <html><body>
+      <li class="serp-item serp-adv" data-cid="ad-1">
+        <span>Реклама</span>
+        <a href="https://yabs.yandex.ru/count/abc?url=https%3A%2F%2Fwww.PULT.ru%2Fcatalog">
+          <h2>Купить гарнитуру</h2>
+        </a>
+        <div>Акция до 01.02.2026</div>
+        <span>www.PULT.ru/catalog</span>
+      </li>
+    </body></html>
+    """
+
+    out = normalize_search_serp(raw_html, response_format="FORMAT_HTML")
+
+    assert out["ads"][0]["domain"] == "pult.ru"
+
+
 def test_normalize_search_html_classifies_ad_types_and_blocks() -> None:
     raw_html = """
     <html><body>

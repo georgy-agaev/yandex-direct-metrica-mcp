@@ -223,7 +223,8 @@ def _is_yandex_ad_host(domain: str) -> bool:
 def _domain_from_visible_text(text: str) -> str:
     for match in _VISIBLE_DOMAIN_RE.finditer(text):
         domain = match.group(1).lower().removeprefix("www.")
-        if not _is_yandex_ad_host(domain):
+        suffix = domain.rsplit(".", 1)[-1]
+        if not suffix.isdigit() and not _is_yandex_ad_host(domain):
             return domain
     return ""
 
