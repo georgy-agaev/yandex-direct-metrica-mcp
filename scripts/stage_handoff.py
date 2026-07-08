@@ -281,11 +281,16 @@ def resolve_source_workspace(source_workspace: Path) -> Path:
 
     parent = source_workspace.parent
     pattern = f"{source_workspace.name}*"
-    candidates = sorted(parent.glob(pattern))
-    candidates = [candidate for candidate in candidates if candidate.is_dir()]
+    candidates = [candidate for candidate in parent.glob(pattern) if candidate.is_dir()]
     if not candidates:
         raise SystemExit(f"Source workspace not found: {source_workspace}")
-    return candidates[-1].resolve()
+    candidates = sorted(candidates, key=lambda path: path.stat().st_mtime, reverse=True)
+
+    for candidate in candidates:
+        if all((candidate / name).exists() for name in FEATURE_REQUIRED):
+            return candidate.resolve()
+
+    return candidates[0].resolve()
 
 
 def apply_feature_patch(source_workspace: Path, repo: Path) -> None:

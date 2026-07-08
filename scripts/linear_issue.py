@@ -43,33 +43,101 @@ def source_workspace_path(issue_identifier: str) -> Path:
     return DEFAULT_WORKSPACE_ROOT / issue_identifier
 
 
-def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -> Path:
-    source_workspace = source_workspace_path(source_issue["identifier"])
-    source_workspace = source_workspace.expanduser()
+def candidate_source_workspaces(issue_identifier: str) -> list[Path]:
+    source_workspace = source_workspace_path(issue_identifier).expanduser()
+    candidates: list[Path] = []
     if source_workspace.exists():
-        resolved = source_workspace.resolve()
-    else:
-        parent = source_workspace.parent
-        pattern = f"{source_workspace.name}*"
-        candidates = sorted(candidate for candidate in parent.glob(pattern) if candidate.is_dir())
-        if not candidates:
-            raise SystemExit(f"Source workspace not found: {source_workspace}")
-        resolved = candidates[-1].resolve()
+        candidates.append(source_workspace.resolve())
+    parent = source_workspace.parent
+    pattern = f"{source_workspace.name}*"
+    globbed = [candidate.resolve() for candidate in parent.glob(pattern) if candidate.is_dir()]
+    seen: set[str] = set()
+    deduped: list[Path] = []
+    for candidate in sorted(globbed, key=lambda path: path.stat().st_mtime, reverse=True):
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+    if candidates:
+        current = str(candidates[0])
+        deduped = [path for path in deduped if str(path) != current]
+        return candidates + deduped
+    return deduped
 
-    verifier = "feature-verify" if stage == "pr" else "pr-verify"
-    command = [sys.executable, "scripts/stage_handoff.py", verifier, "--workspace", str(resolved)]
-    if stage == "pr":
-        command.extend(["--repo", str(resolved)])
+
+def verify_release_source_metadata(source_workspace: Path) -> None:
+    handoff_path = source_workspace / "SYMPHONY_STAGE_HANDOFF.md"
     try:
-        subprocess.run(command, cwd=Path(__file__).resolve().parent.parent, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "").strip()
-        stdout = (exc.stdout or "").strip()
-        details = stderr or stdout or str(exc)
+        handoff_text = handoff_path.read_text(encoding="utf-8").lower()
+    except FileNotFoundError as exc:
+        raise SystemExit(f"Missing PR stage handoff metadata: {handoff_path}") from exc
+
+    required_fragments = (
+        "pr url",
+        "merge status: merged",
+        "merge commit:",
+    )
+    missing = [fragment for fragment in required_fragments if fragment not in handoff_text]
+    if missing:
         raise SystemExit(
-            f"Source workspace for {source_issue['identifier']} does not satisfy {verifier}: {details}"
-        ) from None
-    return resolved
+            "PR stage is not publishable for release follow-up; missing metadata: " + ", ".join(missing)
+        )
+
+
+def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -> Path:
+    if stage == "pr":
+        verifier_name = "review-verify"
+        command = [
+            sys.executable,
+            "scripts/stage_handoff.py",
+            "review-verify",
+            "--workspace",
+            "__WORKSPACE__",
+            "--stage",
+            "feature",
+            "--outcome",
+            "approved",
+        ]
+    else:
+        verifier_name = "review-verify"
+        command = [
+            sys.executable,
+            "scripts/stage_handoff.py",
+            "review-verify",
+            "--workspace",
+            "__WORKSPACE__",
+            "--stage",
+            "pr",
+            "--outcome",
+            "approved",
+        ]
+    candidates = candidate_source_workspaces(source_issue["identifier"])
+    if not candidates:
+        raise SystemExit(f"Source workspace not found: {source_workspace_path(source_issue['identifier'])}")
+
+    failures: list[str] = []
+    repo_root = Path(__file__).resolve().parent.parent
+    for resolved in candidates:
+        candidate_command = command[:]
+        workspace_index = candidate_command.index("--workspace") + 1
+        candidate_command[workspace_index] = str(resolved)
+        try:
+            subprocess.run(candidate_command, cwd=repo_root, check=True, capture_output=True, text=True)
+            if stage == "release":
+                verify_release_source_metadata(resolved)
+            return resolved
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            details = stderr or stdout or str(exc)
+            failures.append(f"{resolved}: {details}")
+        except SystemExit as exc:
+            failures.append(f"{resolved}: {exc}")
+
+    raise SystemExit(
+        f"Source workspace for {source_issue['identifier']} does not satisfy {verifier_name}: " + " | ".join(failures)
+    )
 
 
 def read_markdown(path: Path | None, text: str | None) -> str:
@@ -332,7 +400,19 @@ def update_issue_labels(api_key: str, issue_id: str, label_ids: list[str]) -> di
     return data["data"]["issueUpdate"]["issue"]
 
 
-def find_project_issue_by_title(api_key: str, project_id: str, title: str) -> dict[str, Any] | None:
+def delete_issue(api_key: str, issue_id: str, permanently_delete: bool = False) -> bool:
+    query = """
+    mutation($id: String!, $permanentlyDelete: Boolean) {
+      issueDelete(id: $id, permanentlyDelete: $permanentlyDelete) {
+        success
+      }
+    }
+    """
+    data = graphql(api_key, query, {"id": issue_id, "permanentlyDelete": permanently_delete})
+    return bool(data["data"]["issueDelete"]["success"])
+
+
+def project_issues(api_key: str, project_id: str) -> list[dict[str, Any]]:
     query = """
     query($projectId: String!) {
       project(id: $projectId) {
@@ -342,6 +422,7 @@ def find_project_issue_by_title(api_key: str, project_id: str, title: str) -> di
             identifier
             title
             url
+            state { name }
             labels(first: 100) {
               nodes { name }
             }
@@ -351,11 +432,42 @@ def find_project_issue_by_title(api_key: str, project_id: str, title: str) -> di
     }
     """
     data = graphql(api_key, query, {"projectId": project_id})
-    nodes = data["data"]["project"]["issues"]["nodes"]
+    return data["data"]["project"]["issues"]["nodes"]
+
+
+def find_project_issue_by_title(api_key: str, project_id: str, title: str) -> dict[str, Any] | None:
+    nodes = project_issues(api_key, project_id)
     for node in nodes:
         if node["title"].strip() == title.strip():
             return node
     return None
+
+
+def find_generated_followup_issues(
+    api_key: str,
+    project_id: str,
+    source_identifier: str,
+    stages: list[str] | tuple[str, ...],
+) -> list[dict[str, Any]]:
+    nodes = project_issues(api_key, project_id)
+    matches: list[dict[str, Any]] = []
+    for stage in stages:
+        expected_prefix = ("PR" if stage == "pr" else "Release") + f": {source_identifier} "
+        wanted_labels = {f"{ISSUE_TYPE_PREFIX}{stage}", FOLLOWUP_LABEL}
+        for node in nodes:
+            labels = {name.strip().lower() for name in issue_label_names(node)}
+            if not wanted_labels.issubset(labels):
+                continue
+            if node["title"].strip().startswith(expected_prefix):
+                matches.append(node)
+    deduped: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for node in matches:
+        if node["id"] in seen:
+            continue
+        seen.add(node["id"])
+        deduped.append(node)
+    return deduped
 
 
 def find_generated_followup_issue(
@@ -364,34 +476,23 @@ def find_generated_followup_issue(
     stage: str,
     source_identifier: str,
 ) -> dict[str, Any] | None:
-    query = """
-    query($projectId: String!) {
-      project(id: $projectId) {
-        issues(first: 250) {
-          nodes {
-            id
-            identifier
-            title
-            url
-            labels(first: 100) {
-              nodes { name }
-            }
-          }
-        }
-      }
-    }
-    """
-    data = graphql(api_key, query, {"projectId": project_id})
-    nodes = data["data"]["project"]["issues"]["nodes"]
-    expected_prefix = ("PR" if stage == "pr" else "Release") + f": {source_identifier} "
-    wanted_labels = {f"{ISSUE_TYPE_PREFIX}{stage}", FOLLOWUP_LABEL}
-    for node in nodes:
-        labels = {name.strip().lower() for name in issue_label_names(node)}
-        if not wanted_labels.issubset(labels):
-            continue
-        if node["title"].strip().startswith(expected_prefix):
-            return node
-    return None
+    matches = find_generated_followup_issues(api_key, project_id, source_identifier, [stage])
+    return matches[0] if matches else None
+
+
+def cleanup_generated_followup_issues(
+    api_key: str,
+    source_issue: dict[str, Any],
+    stages: list[str] | tuple[str, ...],
+) -> list[dict[str, Any]]:
+    project = source_issue.get("project") or {}
+    project_id = project.get("id")
+    if not project_id:
+        raise SystemExit(f"Source issue {source_issue['identifier']} has no project")
+    matches = find_generated_followup_issues(api_key, project_id, source_issue["identifier"], stages)
+    for node in matches:
+        delete_issue(api_key, node["id"])
+    return matches
 
 
 def issue_label_names(issue: dict[str, Any]) -> list[str]:
@@ -535,6 +636,7 @@ def followup_description(stage: str, source_issue: dict[str, Any], source_worksp
                 "",
                 "## Acceptance Criteria",
                 "- The release stage uses the approved PR-stage branch/commit metadata from the source workspace.",
+                "- The source PR is already merged before release publication starts.",
                 "- Release tag exists.",
                 "- GitHub Release exists.",
                 "- Docker publish workflows completed.",
@@ -555,7 +657,8 @@ def followup_description(stage: str, source_issue: dict[str, Any], source_worksp
                 "",
                 "## Source Handoff Requirements",
                 f"- Required path: read `{source_workspace_text}/SYMPHONY_HANDOFF.json` first for stage, transition, and cycle metadata.",
-                f"- Required path: read `{source_workspace_text}/SYMPHONY_STAGE_HANDOFF.md` for the approved branch, commit, PR URL, and release notes context.",
+                f"- Required path: read `{source_workspace_text}/SYMPHONY_STAGE_HANDOFF.md` for the approved branch, commit, PR URL, merge status, merge commit, and release notes context.",
+                "- The PR-stage handoff must explicitly show `merge status: merged` and `merge commit:` before this release issue may proceed.",
                 "- If the source workspace does not satisfy the PR handoff contract, do not continue this release stage. Return the source issue to implementation or operator handling first.",
             ]
         )
@@ -618,6 +721,7 @@ def parse_args() -> argparse.Namespace:
             "labels",
             "followup-pr",
             "followup-release",
+            "cleanup-followups",
         ],
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -630,6 +734,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--team-id")
     parser.add_argument("--project-id")
     parser.add_argument(
+        "--stages",
+        help="Comma-separated follow-up stages to target, e.g. pr,release; defaults to both for cleanup-followups",
+    )
+    parser.add_argument(
         "--create-missing-labels",
         action="store_true",
         help="Create missing team-level issue labels before creating the issue",
@@ -637,7 +745,7 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.command in {"preview", "create", "update"} and not args.title:
         parser.error("--title is required for preview/create/update")
-    if args.command in {"state", "comment", "followup-pr", "followup-release"} and not args.issue_id:
+    if args.command in {"state", "comment", "followup-pr", "followup-release", "cleanup-followups"} and not args.issue_id:
         parser.error("--issue-id is required for state/comment")
     if args.command == "comment" and not (args.body_file or args.body):
         parser.error("--from or --body is required for comment")
@@ -653,9 +761,9 @@ def main() -> int:
     config = load_json(args.config)
 
     api_key = os.environ.get("LINEAR_API_KEY")
-    if args.command in {"create", "update", "state", "comment", "labels", "followup-pr", "followup-release"} and not api_key:
+    if args.command in {"create", "update", "state", "comment", "labels", "followup-pr", "followup-release", "cleanup-followups"} and not api_key:
         raise SystemExit(
-            "LINEAR_API_KEY is required for create/update/state/comment/labels/followup-pr/followup-release"
+            "LINEAR_API_KEY is required for create/update/state/comment/labels/followup-pr/followup-release/cleanup-followups"
         )
 
     if args.command == "state":
@@ -687,6 +795,21 @@ def main() -> int:
         updated = update_issue_labels(api_key or "", args.issue_id or "", merged_ids)
         label_names = ",".join(node["name"] for node in updated["labels"]["nodes"])
         print(f"{updated['identifier']} {label_names}")
+        return 0
+
+    if args.command == "cleanup-followups":
+        source_issue = get_issue(api_key or "", args.issue_id or "")
+        stages = parse_csv(args.stages) or ["pr", "release"]
+        valid_stages = {"pr", "release"}
+        invalid = [stage for stage in stages if stage not in valid_stages]
+        if invalid:
+            raise SystemExit(f"Unsupported follow-up stage(s): {', '.join(invalid)}")
+        deleted = cleanup_generated_followup_issues(api_key or "", source_issue, stages)
+        if not deleted:
+            print(f"{source_issue['identifier']} no-followups")
+            return 0
+        for node in deleted:
+            print(f"deleted {node['identifier']} {node['title']}")
         return 0
 
     if args.command in {"followup-pr", "followup-release"}:

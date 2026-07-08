@@ -18,9 +18,11 @@ hooks:
   after_create: |
     git clone --depth 1 https://github.com/georgy-agaev/yandex-direct-metrica-mcp.git .
     python scripts/trust_symphony_workspace.py --workspace .
+  before_remove: |
+    python scripts/archive_stage_handoff.py
 agent:
   max_concurrent_agents: 1
-  max_turns: 2
+  max_turns: 3
 codex:
   command: /Applications/Codex.app/Contents/Resources/codex --model gpt-5.4 --config shell_environment_policy.inherit=all app-server
   approval_policy: never
@@ -87,6 +89,7 @@ Execution:
    - move the issue back to `Todo` for code/test/doc defects,
    - move the issue to `Backlog` for missing credentials, missing external inputs, required manual validation that is impossible in the current environment and is not already satisfied by existing comments/artifacts, or exhausted retry budget.
 13. If findings are empty:
+   - for a PR issue carrying `release-required`, findings are not empty unless the PR-stage handoff proves the source PR is already merged and records the merge commit;
    - write/update `SYMPHONY_HANDOFF.json` with:
      - `stage.role = review`
      - `transition.to_state = Done`
@@ -104,6 +107,7 @@ Follow-up rules:
 
 - feature issue -> `python scripts/linear_issue.py followup-pr --issue-id {{ issue.identifier }} --create-missing-labels`
 - PR issue + `release-required` -> `python scripts/linear_issue.py followup-release --issue-id {{ issue.identifier }} --create-missing-labels`
+  - this command must fail closed if the PR-stage handoff does not explicitly show `merge status: merged` and a `merge commit:`
 - release issue -> no further follow-up
 
 Hard rules:

@@ -97,6 +97,7 @@ Path:
 Behavior:
 
 - implementation lane re-runs non-live gates, commits, pushes, and creates or updates the GitHub PR;
+- if the PR issue carries `release-required`, the PR stage is not complete until the PR is publishable and merged;
 - review lane verifies the PR stage artifacts;
 - when review passes:
   - if the source chain does not need release publication, the PR issue ends at `Done`;
@@ -144,6 +145,7 @@ Behavior:
 
 - `followup-pr` creates a PR issue in the same team and project as the source issue;
 - `followup-release` creates a release issue in the same team and project as the source issue;
+- `followup-release` must fail closed unless the source PR-stage handoff explicitly records `merge status: merged` and a merge commit SHA;
 - before a follow-up is created or resynced, the source workspace must pass the stage handoff verifier for its stage;
 - if a generated follow-up for the same source issue and stage already exists, Symphony must fully resync its title, description, labels, and state from the current source-stage contract instead of partially reusing stale content;
 - if the source handoff is invalid, Symphony must stop and fix the source stage instead of creating or refreshing a broken follow-up;
