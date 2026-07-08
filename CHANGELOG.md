@@ -4,6 +4,8 @@ All notable changes to this MCP project will be documented in this file.
 
 ## Unreleased
 
+- Search API: hardened `search_serp` ad normalization so HTML ads expose advertiser domains, redirect `click_url`, ad `type`, top/bottom `block`, and `ads_count_bottom` while keeping organic extraction stable.
+
 ## 2.0.13 - 2026-07-01
 
 - Search API: restored and shipped the bounded `search_serp` MCP tool with normalized ads plus organic results, HTML/XML parsing, region/device controls, and public contract snapshots/tests.

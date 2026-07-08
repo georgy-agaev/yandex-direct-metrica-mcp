@@ -195,7 +195,7 @@ Search API tools do **not** use Direct OAuth. Configure them separately:
 
 If `wordstat.user_info` or any `wordstat.*` call returns 401/403, check the role/scope/folder above. For `wordstat.dynamics`, monthly `to_date` must be `YYYY-MM` or the last day of the month; weekly boundaries are provider-specific, so use raw `params` only with a confirmed provider-valid `toDate`.
 
-`search_serp` uses the same Search API credentials and returns normalized `ads`, `ads_count_top`, `organic`, and `captcha`. Use `format=html` when ads are required; raw HTML is returned only with `include_raw=true`.
+`search_serp` uses the same Search API credentials and returns normalized `ads`, `ads_count_top`, `ads_count_bottom`, `organic`, and `captcha`. For HTML ads, `ads[].domain` is the normalized advertiser domain, `ads[].click_url` retains the Yandex redirect when present, `ads[].type` is `text`, `product_gallery`, or `native`, and `ads[].block` is `top` or `bottom` when placement can be inferred. Use `format=html` when ads are required; raw HTML is returned only with `include_raw=true`.
 
 Multi-account registry:
 - `MCP_ACCOUNTS_FILE=/data/accounts.json`

@@ -3024,6 +3024,16 @@
         "ads": {
           "items": {
             "properties": {
+              "block": {
+                "enum": [
+                  "top",
+                  "bottom"
+                ],
+                "type": "string"
+              },
+              "click_url": {
+                "type": "string"
+              },
               "domain": {
                 "type": "string"
               },
@@ -3034,6 +3044,14 @@
                 "type": "string"
               },
               "title": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "product_gallery",
+                  "native"
+                ],
                 "type": "string"
               },
               "url": {
@@ -3048,6 +3066,9 @@
             "type": "object"
           },
           "type": "array"
+        },
+        "ads_count_bottom": {
+          "type": "integer"
         },
         "ads_count_top": {
           "type": "integer"
@@ -3073,6 +3094,16 @@
         "organic": {
           "items": {
             "properties": {
+              "block": {
+                "enum": [
+                  "top",
+                  "bottom"
+                ],
+                "type": "string"
+              },
+              "click_url": {
+                "type": "string"
+              },
               "domain": {
                 "type": "string"
               },
@@ -3083,6 +3114,14 @@
                 "type": "string"
               },
               "title": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "product_gallery",
+                  "native"
+                ],
                 "type": "string"
               },
               "url": {
@@ -3126,6 +3165,7 @@
         "device",
         "ads",
         "ads_count_top",
+        "ads_count_bottom",
         "organic",
         "captcha"
       ],

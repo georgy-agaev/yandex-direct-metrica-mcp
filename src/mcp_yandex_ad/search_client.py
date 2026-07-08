@@ -8,7 +8,7 @@ from html import unescape
 from html.parser import HTMLParser
 import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from xml.etree import ElementTree
 
 import requests
@@ -210,6 +210,36 @@ def _domain_from_url(url: str) -> str:
     return host.lower().removeprefix("www.")
 
 
+_VISIBLE_DOMAIN_RE = re.compile(
+    r"(?<![\w.-])(?:https?://)?(?:www\.)?([a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+)",
+    re.IGNORECASE,
+)
+
+
+def _is_yandex_ad_host(domain: str) -> bool:
+    return domain in {"yabs.yandex.ru", "an.yandex.ru", "yandex.ru"}
+
+
+def _domain_from_visible_text(text: str) -> str:
+    for match in _VISIBLE_DOMAIN_RE.finditer(text):
+        domain = match.group(1).lower().removeprefix("www.")
+        suffix = domain.rsplit(".", 1)[-1]
+        if not suffix.isdigit() and not _is_yandex_ad_host(domain):
+            return domain
+    return ""
+
+
+def _landing_url_from_redirect(url: str) -> str:
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    for key in ("url", "u", "target", "href", "redir"):
+        for value in params.get(key, []):
+            decoded = unquote(value)
+            if decoded.startswith(("http://", "https://")):
+                return decoded
+    return ""
+
+
 def _is_captcha(raw: str) -> bool:
     lowered = raw.lower()
     return "showcaptcha" in lowered or "captcha" in lowered or "are you not a robot" in lowered
@@ -222,7 +252,13 @@ def parse_search_xml(raw_xml: str) -> dict[str, Any]:
     try:
         root = ElementTree.fromstring(raw_xml)
     except ElementTree.ParseError:
-        return {"organic": organic, "ads": [], "ads_count_top": 0, "captcha": _is_captcha(raw_xml)}
+        return {
+            "organic": organic,
+            "ads": [],
+            "ads_count_top": 0,
+            "ads_count_bottom": 0,
+            "captcha": _is_captcha(raw_xml),
+        }
 
     def text_at(node: ElementTree.Element, path: str) -> str:
         found = node.find(path)
@@ -257,7 +293,13 @@ def parse_search_xml(raw_xml: str) -> dict[str, Any]:
             }
         )
 
-    out: dict[str, Any] = {"organic": organic, "ads": [], "ads_count_top": 0, "captcha": False}
+    out: dict[str, Any] = {
+        "organic": organic,
+        "ads": [],
+        "ads_count_top": 0,
+        "ads_count_bottom": 0,
+        "captcha": False,
+    }
     if reqid:
         out["request_id"] = reqid
     if found_docs_human:
@@ -304,6 +346,22 @@ class _SerpBlock:
             "yabs",
         )
         return any(marker in haystack for marker in markers)
+
+    def ad_type(self) -> str:
+        haystack = f"{self.attrs_text} {self.text} {' '.join(h for h, _t in self.links)}".lower()
+        if "an.yandex.ru" in haystack or "может заинтересовать" in haystack:
+            return "native"
+        product_markers = (
+            "популярные товары",
+            "товарная галерея",
+            "product-gallery",
+            "product_gallery",
+            "products-gallery",
+            "carousel",
+        )
+        if any(marker in haystack for marker in product_markers):
+            return "product_gallery"
+        return "text"
 
 
 class _YandexHtmlParser(HTMLParser):
@@ -384,7 +442,7 @@ class _YandexHtmlParser(HTMLParser):
 
 def parse_search_html(raw_html: str) -> dict[str, Any]:
     if _is_captcha(raw_html):
-        return {"organic": [], "ads": [], "ads_count_top": 0, "captcha": True}
+        return {"organic": [], "ads": [], "ads_count_top": 0, "ads_count_bottom": 0, "captcha": True}
 
     parser = _YandexHtmlParser()
     parser.feed(raw_html)
@@ -398,7 +456,9 @@ def parse_search_html(raw_html: str) -> dict[str, Any]:
         title = block.title
         if not href or not title:
             continue
-        domain = _domain_from_url(href)
+        landing_url = _landing_url_from_redirect(href)
+        visible_domain = _domain_from_visible_text(block.text)
+        domain = visible_domain or _domain_from_url(landing_url) or _domain_from_url(href)
         if not domain:
             continue
         key = (domain, title)
@@ -408,10 +468,15 @@ def parse_search_html(raw_html: str) -> dict[str, Any]:
         item = {
             "domain": domain,
             "title": title,
-            "url": href,
+            "url": landing_url or href,
             "snippet": block.text,
         }
         if block.is_ad():
+            ad_type = block.ad_type()
+            item["type"] = ad_type
+            if href != item["url"] or _is_yandex_ad_host(_domain_from_url(href)):
+                item["click_url"] = href
+            item["block"] = "bottom" if "organic" in sequence else "top"
             item["position"] = len(ads) + 1
             ads.append(item)
             sequence.append("ad")
@@ -421,16 +486,20 @@ def parse_search_html(raw_html: str) -> dict[str, Any]:
             sequence.append("organic")
 
     ads_count_top = 0
-    for kind in sequence:
-        if kind == "ad":
-            ads_count_top += 1
+    ads_count_bottom = 0
+    for ad in ads:
+        if ad.get("type") != "text":
             continue
-        break
+        if ad.get("block") == "top":
+            ads_count_top += 1
+        elif ad.get("block") == "bottom":
+            ads_count_bottom += 1
 
     return {
         "organic": organic,
         "ads": ads,
         "ads_count_top": ads_count_top,
+        "ads_count_bottom": ads_count_bottom,
         "captcha": False,
     }
 

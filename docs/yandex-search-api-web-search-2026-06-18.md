@@ -122,9 +122,19 @@ Response shape:
   "page": 0,
   "search_type": "SEARCH_TYPE_RU",
   "ads": [
-    {"domain": "example.ru", "title": "Ad title", "snippet": "Ad snippet", "url": "https://example.ru", "position": 1}
+    {
+      "domain": "example.ru",
+      "title": "Ad title",
+      "snippet": "Ad snippet",
+      "url": "https://example.ru",
+      "click_url": "https://yabs.yandex.ru/count/...",
+      "type": "text",
+      "block": "top",
+      "position": 1
+    }
   ],
   "ads_count_top": 1,
+  "ads_count_bottom": 0,
   "organic": [
     {"domain": "example.org", "title": "Organic title", "snippet": "Organic snippet", "url": "https://example.org", "position": 1}
   ],
@@ -135,6 +145,11 @@ Response shape:
 Notes:
 
 - `format=html` is the default and is required for ad extraction.
+- For ads, `domain` is the normalized advertiser domain. `click_url` contains
+  the Yandex redirect URL when the parser retains one.
+- Use `ads[].type` to filter normal text ads from `product_gallery` and `native`
+  blocks. `ads_count_top` and `ads_count_bottom` count only `type=text`.
+- Use `ads[].block` for top/bottom slot analysis when placement is inferred.
 - `format=xml` is useful for organic result debugging, but ad extraction is not
   expected from XML.
 - `device` is implemented via the documented `userAgent` request field; the

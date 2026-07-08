@@ -76,7 +76,7 @@
 ## Search API Web Search
 | Tool | Type | Requires | Guards | Notes |
 | --- | --- | --- | --- | --- |
-| `search_serp` | Read | Yandex Search API folder + API key/IAM token | `MCP_SEARCH_API_ENABLED` | Возвращает нормализованные `ads`, `ads_count_top`, `organic`, `captcha`; `format=html` нужен для рекламы, raw HTML/XML только при `include_raw=true`. |
+| `search_serp` | Read | Yandex Search API folder + API key/IAM token | `MCP_SEARCH_API_ENABLED` | Возвращает нормализованные `ads`, `ads_count_top`, `ads_count_bottom`, `organic`, `captcha`; для HTML-рекламы `ads[].domain` - домен рекламодателя, `click_url` - редирект, `type` - `text`/`product_gallery`/`native`, `block` - `top`/`bottom`; raw HTML/XML только при `include_raw=true`. |
 
 ## HF tools (Direct)
 Примечание: HF-инструменты Direct **выполняют запись только при `apply=true`**.

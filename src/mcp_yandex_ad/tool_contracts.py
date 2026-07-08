@@ -258,12 +258,24 @@ def _search_serp_schema() -> dict[str, Any]:
             "title": {"type": "string"},
             "snippet": {"type": "string"},
             "url": {"type": "string"},
+            "click_url": {"type": "string"},
+            "type": {"type": "string", "enum": ["text", "product_gallery", "native"]},
+            "block": {"type": "string", "enum": ["top", "bottom"]},
             "position": {"type": "integer"},
         },
     }
     return {
         "type": "object",
-        "required": ["query", "region", "device", "ads", "ads_count_top", "organic", "captcha"],
+        "required": [
+            "query",
+            "region",
+            "device",
+            "ads",
+            "ads_count_top",
+            "ads_count_bottom",
+            "organic",
+            "captcha",
+        ],
         "properties": {
             "query": {"type": "string"},
             "region": {"type": "integer"},
@@ -275,6 +287,7 @@ def _search_serp_schema() -> dict[str, Any]:
             "search_type": {"type": "string"},
             "ads": {"type": "array", "items": result_item},
             "ads_count_top": {"type": "integer"},
+            "ads_count_bottom": {"type": "integer"},
             "organic": {"type": "array", "items": result_item},
             "captcha": {"type": "boolean"},
             "request_id": {"type": "string"},
