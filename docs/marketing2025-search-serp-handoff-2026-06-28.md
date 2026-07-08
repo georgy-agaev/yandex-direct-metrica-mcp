@@ -38,10 +38,14 @@ Response example:
       "title": "Ad title",
       "snippet": "Ad snippet",
       "url": "https://example.ru",
+      "click_url": "https://yabs.yandex.ru/count/...",
+      "type": "text",
+      "block": "top",
       "position": 1
     }
   ],
   "ads_count_top": 1,
+  "ads_count_bottom": 0,
   "organic": [
     {
       "domain": "example.org",
@@ -63,8 +67,13 @@ Response example:
 | Region control | `region` | Defaults to server `YANDEX_SEARCH_API_DEFAULT_REGION` when omitted. |
 | Device control | `device` | Implemented through Search API `userAgent`; response uses `DEVICE_DESKTOP`, `DEVICE_PHONE`, or `DEVICE_TABLET`. |
 | Search type | `search_type` | Defaults to `SEARCH_TYPE_RU`; pass another provider enum only when the client needs a different search corpus. |
-| Top ad slot count | `ads_count_top` | Counts ads before the first organic result in normalized order. |
-| Ad domains/titles/snippets | `ads[]` | Requires `format=html`; parser runs inside MCP. |
+| Top ad slot count | `ads_count_top` | Counts only `type=text` ads before the first organic result in normalized order. |
+| Bottom ad slot count | `ads_count_bottom` | Counts only `type=text` ads after organic results start. |
+| Advertiser detection | `ads[].domain` | Normalized advertiser domain, lowercased and without `www.`. Do not use `click_url` for competitor/own-domain matching. |
+| Redirect diagnostics | `ads[].click_url` | Yandex redirect URL when retained by the parser. |
+| Ad block filtering | `ads[].type` | `text`, `product_gallery`, or `native`; use `type=text` for ad competitor and own-domain metrics. |
+| Slot analysis | `ads[].block` | `top` or `bottom` when placement can be inferred. |
+| Ad titles/snippets | `ads[]` | Requires `format=html`; parser runs inside MCP. |
 | Organic domains/titles/URLs | `organic[]` | Available for `format=html`; XML can be used for organic-only debugging. |
 | Captcha detection | `captcha` | True when the returned payload is a captcha/interstitial page. |
 | Raw HTML review | `raw_html` | Only returned when `include_raw=true`; do not make prompt-space parsing the default path. |
@@ -73,6 +82,9 @@ Response example:
 
 - Replace Playwright SERP page loading for covered queries with `search_serp`.
 - Treat `ads` and `organic` as the source of truth instead of scraping prompt text.
+- Use `ads[].domain` for `ad_competitors` and `our_ad_present`.
+- Filter `ads[]` to `type=text` before competitor and own-domain calculations.
+- Use `ads[].block`, `ads_count_top`, and `ads_count_bottom` for top/bottom slot analysis.
 - Keep the existing query list, region IDs, and desktop/mobile intent mapping.
 - Map current mobile requests to `device=phone` or `device=mobile`.
 - Use `include_raw=true` only for diagnostics or parser review artifacts.

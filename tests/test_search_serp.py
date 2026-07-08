@@ -56,12 +56,15 @@ def test_normalize_search_html_extracts_top_ads_and_organic() -> None:
 
     assert out["captcha"] is False
     assert out["ads_count_top"] == 1
+    assert out["ads_count_bottom"] == 0
     assert out["ads"] == [
         {
             "domain": "ads.example.ru",
             "title": "Ad title",
             "url": "https://ads.example.ru/page",
             "snippet": "Реклама Ad title Ad snippet text",
+            "type": "text",
+            "block": "top",
             "position": 1,
         }
     ]
@@ -100,6 +103,71 @@ def test_parse_search_xml_extracts_organic_results() -> None:
         }
     ]
     assert out["ads"] == []
+    assert out["ads_count_bottom"] == 0
+
+
+def test_normalize_search_html_prefers_visible_ad_domain_over_redirect() -> None:
+    raw_html = """
+    <html><body>
+      <li class="serp-item serp-adv" data-cid="ad-1">
+        <span>Реклама</span>
+        <a href="https://yabs.yandex.ru/count/abc?url=https%3A%2F%2Fwww.PULT.ru%2Fcatalog">
+          <h2>Купить гарнитуру</h2>
+        </a>
+        <span>www.PULT.ru/catalog</span>
+        <div>Профессиональные гарнитуры</div>
+      </li>
+    </body></html>
+    """
+
+    out = normalize_search_serp(raw_html, response_format="FORMAT_HTML")
+
+    assert out["ads_count_top"] == 1
+    assert out["ads"][0]["domain"] == "pult.ru"
+    assert out["ads"][0]["url"] == "https://www.PULT.ru/catalog"
+    assert out["ads"][0]["click_url"].startswith("https://yabs.yandex.ru/")
+    assert out["ads"][0]["type"] == "text"
+    assert out["ads"][0]["block"] == "top"
+
+
+def test_normalize_search_html_classifies_ad_types_and_blocks() -> None:
+    raw_html = """
+    <html><body>
+      <li class="serp-item serp-adv" data-cid="ad-1">
+        <span>Реклама</span>
+        <a href="https://direct.example.ru"><h2>Top text ad</h2></a>
+        <span>direct.example.ru</span>
+      </li>
+      <li class="serp-item" data-cid="org-1">
+        <a href="https://organic.example.ru"><h2>Organic title</h2></a>
+        <div>Organic snippet</div>
+      </li>
+      <section class="serp-item serp-adv product-gallery" data-cid="gallery-1">
+        <h2>Популярные товары</h2>
+        <a href="https://market.example.ru/product"><span>market.example.ru</span></a>
+      </section>
+      <div class="serp-item serp-adv" data-cid="native-1">
+        <span>Может заинтересовать</span>
+        <a href="https://an.yandex.ru/map?url=https%3A%2F%2Fnative.example.ru">
+          <h2>Native recommendation</h2>
+        </a>
+        <span>native.example.ru</span>
+      </div>
+      <li class="serp-item serp-adv" data-cid="ad-2">
+        <span>Реклама</span>
+        <a href="https://bottom.example.ru"><h2>Bottom text ad</h2></a>
+        <span>bottom.example.ru</span>
+      </li>
+    </body></html>
+    """
+
+    out = normalize_search_serp(raw_html, response_format="FORMAT_HTML")
+
+    assert [ad["type"] for ad in out["ads"]] == ["text", "product_gallery", "native", "text"]
+    assert [ad["block"] for ad in out["ads"]] == ["top", "bottom", "bottom", "bottom"]
+    assert out["ads_count_top"] == 1
+    assert out["ads_count_bottom"] == 1
+    assert out["ads"][2]["domain"] == "native.example.ru"
 
 
 def test_search_serp_server_helper_omits_raw_by_default(monkeypatch) -> None:

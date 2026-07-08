@@ -123,9 +123,19 @@ Search API. Размер страницы задается через `groupSpec
   "page": 0,
   "search_type": "SEARCH_TYPE_RU",
   "ads": [
-    {"domain": "example.ru", "title": "Ad title", "snippet": "Ad snippet", "url": "https://example.ru", "position": 1}
+    {
+      "domain": "example.ru",
+      "title": "Ad title",
+      "snippet": "Ad snippet",
+      "url": "https://example.ru",
+      "click_url": "https://yabs.yandex.ru/count/...",
+      "type": "text",
+      "block": "top",
+      "position": 1
+    }
   ],
   "ads_count_top": 1,
+  "ads_count_bottom": 0,
   "organic": [
     {"domain": "example.org", "title": "Organic title", "snippet": "Organic snippet", "url": "https://example.org", "position": 1}
   ],
@@ -136,6 +146,13 @@ Search API. Размер страницы задается через `groupSpec
 Примечания:
 
 - `format=html` используется по умолчанию и нужен для извлечения рекламы.
+- Для рекламы `domain` - нормализованный домен рекламодателя. `click_url`
+  содержит Yandex redirect URL, если parser его сохраняет.
+- Используйте `ads[].type`, чтобы отделять обычные текстовые объявления от
+  `product_gallery` и `native`. `ads_count_top` и `ads_count_bottom` считают
+  только `type=text`.
+- Используйте `ads[].block` для анализа верхнего и нижнего рекламного блока,
+  когда placement удалось определить.
 - `format=xml` полезен для отладки organic-результатов, но реклама из XML не
   ожидается.
 - `device` реализован через документированное поле `userAgent`; ответ возвращает
