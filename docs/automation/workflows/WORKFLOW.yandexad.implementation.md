@@ -30,7 +30,7 @@ codex:
   approval_policy: never
   thread_sandbox: danger-full-access
   turn_sandbox_policy:
-    type: workspaceWrite
+    type: dangerFullAccess
     networkAccess: true
 ---
 You are the implementation lane for the `yandex.ad` repository.
