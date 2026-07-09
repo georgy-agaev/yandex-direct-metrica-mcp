@@ -20,6 +20,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 RELEASES_DIR = ROOT / "docs" / "releases"
 VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
+DISPLAY_PYTHON = ".venv/bin/python"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -630,11 +631,11 @@ def main() -> int:
         replace_project_version(target_version)
         release_body = update_changelog_for_release(target_version, release_date)
         validations = [
-            f"{workspace_python} -m compileall -q src/mcp_yandex_ad",
-            f"{workspace_python} -m pytest -q",
-            f"{workspace_python} scripts/agent_lint.py",
-            f"{workspace_python} scripts/live_validation.py --suite direct,metrica,wordstat,search",
-            f"{workspace_python} scripts/release_guard.py --version {target_version} --require-release-notes",
+            f"{DISPLAY_PYTHON} -m compileall -q src/mcp_yandex_ad",
+            f"{DISPLAY_PYTHON} -m pytest -q",
+            f"{DISPLAY_PYTHON} scripts/agent_lint.py",
+            f"{DISPLAY_PYTHON} scripts/live_validation.py --suite direct,metrica,wordstat,search",
+            f"{DISPLAY_PYTHON} scripts/release_guard.py --version {target_version} --require-release-notes",
         ]
         release_note = write_release_notes(
             target_version,
@@ -648,31 +649,31 @@ def main() -> int:
 
         run_step(
             [workspace_python, "-m", "compileall", "-q", "src/mcp_yandex_ad"],
-            label=f"{workspace_python} -m compileall -q src/mcp_yandex_ad",
+            label=f"{DISPLAY_PYTHON} -m compileall -q src/mcp_yandex_ad",
             external=False,
             passed=validations_passed,
         )
         run_step(
             [workspace_python, "-m", "pytest", "-q"],
-            label=f"{workspace_python} -m pytest -q",
+            label=f"{DISPLAY_PYTHON} -m pytest -q",
             external=False,
             passed=validations_passed,
         )
         run_step(
             [workspace_python, "scripts/agent_lint.py"],
-            label=f"{workspace_python} scripts/agent_lint.py",
+            label=f"{DISPLAY_PYTHON} scripts/agent_lint.py",
             external=False,
             passed=validations_passed,
         )
         run_step(
             [workspace_python, "scripts/live_validation.py", "--suite", "direct,metrica,wordstat,search"],
-            label=f"{workspace_python} scripts/live_validation.py --suite direct,metrica,wordstat,search",
+            label=f"{DISPLAY_PYTHON} scripts/live_validation.py --suite direct,metrica,wordstat,search",
             external=True,
             passed=validations_passed,
         )
         run_step(
             [workspace_python, "scripts/release_guard.py", "--version", target_version, "--require-release-notes"],
-            label=f"{workspace_python} scripts/release_guard.py --version {target_version} --require-release-notes",
+            label=f"{DISPLAY_PYTHON} scripts/release_guard.py --version {target_version} --require-release-notes",
             external=False,
             passed=validations_passed,
         )
@@ -731,7 +732,7 @@ def main() -> int:
             run_step(
                 command,
                 label=(
-                    f"{workspace_python} scripts/sync_local_docker_release.py --version {target_version} --owner {args.owner}"
+                    f"{DISPLAY_PYTHON} scripts/sync_local_docker_release.py --version {target_version} --owner {args.owner}"
                     + (" --include-pro" if args.include_pro else "")
                 ),
                 external=True,
