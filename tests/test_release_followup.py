@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from scripts import release_followup
+
+
+def test_next_patch_version() -> None:
+    assert release_followup.next_patch_version("2.0.13") == "2.0.14"
+
+
+def test_update_changelog_for_release_moves_unreleased(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "# Changelog\n\n## Unreleased\n\n- First item.\n- Second item.\n\n## 2.0.13 - 2026-07-01\n\n- Older.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(release_followup, "CHANGELOG", changelog)
+
+    body = release_followup.update_changelog_for_release("2.0.14", "2026-07-09")
+
+    assert body == "- First item.\n- Second item."
+    text = changelog.read_text(encoding="utf-8")
+    assert "## Unreleased\n\n## 2.0.14 - 2026-07-09" in text
+    assert text.index("## 2.0.14 - 2026-07-09") < text.index("## 2.0.13 - 2026-07-01")
+
+
+def test_update_changelog_for_release_is_idempotent_for_existing_heading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        "# Changelog\n\n## Unreleased\n\n## 2.0.14 - 2026-07-09\n\n- Released item.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(release_followup, "CHANGELOG", changelog)
+
+    body = release_followup.update_changelog_for_release("2.0.14", "2026-07-09")
+
+    assert body == "- Released item."
+    assert changelog.read_text(encoding="utf-8").count("## 2.0.14 - 2026-07-09") == 1
+
+
+def test_write_release_notes_renders_summary_and_validation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    releases_dir = tmp_path / "docs" / "releases"
+    monkeypatch.setattr(release_followup, "RELEASES_DIR", releases_dir)
+
+    path = release_followup.write_release_notes(
+        "2.0.14",
+        "2026-07-09",
+        "- Released item.",
+        issue_identifier="GEO-17",
+        source_issue="GEO-15",
+        pr_url="https://github.com/example/repo/pull/7",
+        validations=["pytest -q", "python scripts/agent_lint.py"],
+    )
+
+    assert path == releases_dir / "v2.0.14.md"
+    text = path.read_text(encoding="utf-8")
+    assert "# v2.0.14" in text
+    assert "- Release issue: `GEO-17`" in text
+    assert "- Source PR issue: `GEO-15`" in text
+    assert "- Released item." in text
+    assert "- `pytest -q`" in text
+
+
+def test_ensure_repo_ready_for_release_allows_only_release_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(release_followup, "remove_stale_artifacts", lambda: None)
+    monkeypatch.setattr(
+        release_followup,
+        "dirty_paths",
+        lambda: ["pyproject.toml", "CHANGELOG.md", "docs/releases/v2.0.14.md"],
+    )
+
+    release_followup.ensure_repo_ready_for_release()
+
+
+def test_ensure_repo_ready_for_release_rejects_unexpected_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(release_followup, "remove_stale_artifacts", lambda: None)
+    monkeypatch.setattr(
+        release_followup,
+        "dirty_paths",
+        lambda: ["pyproject.toml", "src/mcp_yandex_ad/server.py"],
+    )
+
+    with pytest.raises(SystemExit, match="unexpected dirty paths"):
+        release_followup.ensure_repo_ready_for_release()

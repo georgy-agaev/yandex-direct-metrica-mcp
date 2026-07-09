@@ -223,6 +223,11 @@ Do:
 - start with deterministic preflight before any release work:
   - `python scripts/followup_preflight.py --issue-id {{ issue.identifier }} --stage release`
   - if preflight returns `ok=false`, do not continue; write the blocker into `SYMPHONY_WORK_RESULT.md`, leave one concise Linear comment, and move the issue to `Backlog`
+- after preflight succeeds, run the scripted release path before any broad repo exploration:
+  - `python scripts/release_followup.py --issue-id {{ issue.identifier }} --include-pro`
+  - this command owns version bumping, release-note generation, local gates, live validation, tag push, workflow verification, GitHub Release verification, and local Docker alias refresh;
+  - if it succeeds, use the generated `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`, and `RELEASE_SUMMARY.json` as the stage truth;
+  - do not replace this with ad hoc release reasoning unless the script itself is what needs repair
 - satisfy `Release Validation` from the issue body.
 
 Default fallback only when the issue body does not define `Release Validation`:

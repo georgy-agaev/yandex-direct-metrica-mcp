@@ -84,6 +84,8 @@ def test_followup_description_for_release_contains_release_contract() -> None:
     assert "required_pr_merge: yes" in body
     assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_HANDOFF.md" in body
+    assert "python scripts/release_followup.py --issue-id {{ issue.identifier }}" in body
+    assert "next patch version from `pyproject.toml`" in body
     assert "GitHub Release exists." in body
     assert "The source PR is already merged before release publication starts." in body
     assert "merge status: merged" in body
