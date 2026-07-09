@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 RELEASES_DIR = ROOT / "docs" / "releases"
+VENV_PYTHON = ROOT / ".venv" / "bin" / "python"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -94,6 +95,17 @@ def git_output(*args: str) -> str:
 
 def gh_output(*args: str) -> str:
     return run(["gh", *args], capture_output=True).stdout.strip()
+
+
+def bootstrap_workspace_python() -> str:
+    try:
+        result = run([sys.executable, "scripts/bootstrap_workspace.py"], capture_output=True)
+        python_bin = result.stdout.strip().splitlines()[-1]
+    except subprocess.CalledProcessError as exc:
+        raise ReleaseStepError("python scripts/bootstrap_workspace.py", command_details(exc), False) from exc
+    if not python_bin:
+        python_bin = str(VENV_PYTHON)
+    return python_bin
 
 
 def current_version() -> str:
@@ -597,8 +609,10 @@ def main() -> int:
     target_version: str | None = None
     source_issue: str | None = None
     validations_passed: list[str] = []
+    workspace_python = sys.executable
     try:
         ensure_repo_ready_for_release()
+        workspace_python = bootstrap_workspace_python()
 
         if linear_issue.classify_issue_type(linear_issue.issue_label_names(issue)) != "release":
             raise ReleaseStepError("issue classification", f"Issue {args.issue_id} is not a release issue", False)
@@ -616,11 +630,11 @@ def main() -> int:
         replace_project_version(target_version)
         release_body = update_changelog_for_release(target_version, release_date)
         validations = [
-            "python -m compileall -q src/mcp_yandex_ad",
-            "pytest -q",
-            "python scripts/agent_lint.py",
-            "python scripts/live_validation.py --suite direct,metrica,wordstat,search",
-            f"python scripts/release_guard.py --version {target_version} --require-release-notes",
+            f"{workspace_python} -m compileall -q src/mcp_yandex_ad",
+            f"{workspace_python} -m pytest -q",
+            f"{workspace_python} scripts/agent_lint.py",
+            f"{workspace_python} scripts/live_validation.py --suite direct,metrica,wordstat,search",
+            f"{workspace_python} scripts/release_guard.py --version {target_version} --require-release-notes",
         ]
         release_note = write_release_notes(
             target_version,
@@ -633,27 +647,32 @@ def main() -> int:
         )
 
         run_step(
-            [sys.executable, "-m", "compileall", "-q", "src/mcp_yandex_ad"],
-            label="python -m compileall -q src/mcp_yandex_ad",
-            external=False,
-            passed=validations_passed,
-        )
-        run_step([sys.executable, "-m", "pytest", "-q"], label="pytest -q", external=False, passed=validations_passed)
-        run_step(
-            [sys.executable, "scripts/agent_lint.py"],
-            label="python scripts/agent_lint.py",
+            [workspace_python, "-m", "compileall", "-q", "src/mcp_yandex_ad"],
+            label=f"{workspace_python} -m compileall -q src/mcp_yandex_ad",
             external=False,
             passed=validations_passed,
         )
         run_step(
-            [sys.executable, "scripts/live_validation.py", "--suite", "direct,metrica,wordstat,search"],
-            label="python scripts/live_validation.py --suite direct,metrica,wordstat,search",
+            [workspace_python, "-m", "pytest", "-q"],
+            label=f"{workspace_python} -m pytest -q",
+            external=False,
+            passed=validations_passed,
+        )
+        run_step(
+            [workspace_python, "scripts/agent_lint.py"],
+            label=f"{workspace_python} scripts/agent_lint.py",
+            external=False,
+            passed=validations_passed,
+        )
+        run_step(
+            [workspace_python, "scripts/live_validation.py", "--suite", "direct,metrica,wordstat,search"],
+            label=f"{workspace_python} scripts/live_validation.py --suite direct,metrica,wordstat,search",
             external=True,
             passed=validations_passed,
         )
         run_step(
-            [sys.executable, "scripts/release_guard.py", "--version", target_version, "--require-release-notes"],
-            label=f"python scripts/release_guard.py --version {target_version} --require-release-notes",
+            [workspace_python, "scripts/release_guard.py", "--version", target_version, "--require-release-notes"],
+            label=f"{workspace_python} scripts/release_guard.py --version {target_version} --require-release-notes",
             external=False,
             passed=validations_passed,
         )
@@ -700,7 +719,7 @@ def main() -> int:
         if not args.skip_local_docker_sync:
             ghcr_login(args.owner)
             command = [
-                sys.executable,
+                workspace_python,
                 "scripts/sync_local_docker_release.py",
                 "--version",
                 target_version,
@@ -712,7 +731,7 @@ def main() -> int:
             run_step(
                 command,
                 label=(
-                    f"python scripts/sync_local_docker_release.py --version {target_version} --owner {args.owner}"
+                    f"{workspace_python} scripts/sync_local_docker_release.py --version {target_version} --owner {args.owner}"
                     + (" --include-pro" if args.include_pro else "")
                 ),
                 external=True,

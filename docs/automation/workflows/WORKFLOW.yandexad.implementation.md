@@ -19,6 +19,7 @@ hooks:
   after_create: |
     git clone --depth 1 https://github.com/georgy-agaev/yandex-direct-metrica-mcp.git .
     python scripts/trust_symphony_workspace.py --workspace .
+    python scripts/bootstrap_workspace.py
   before_remove: |
     python scripts/archive_stage_handoff.py
 agent:
