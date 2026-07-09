@@ -165,6 +165,7 @@ Both commands:
 - inherit context labels;
 - replace the previous `issue-type:*` label with the new stage label;
 - include the deterministic source workspace path for the previous stage;
+- include a machine-readable `Symphony Preflight Metadata` block so the follow-up stage can fail fast without reparsing the whole issue body;
 - require portable handoff artifacts from the previous stage:
   - feature -> PR: `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_STAGE_HANDOFF.md`, `SYMPHONY_STAGE_PATCH.diff`
   - PR -> release: `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_STAGE_HANDOFF.md`

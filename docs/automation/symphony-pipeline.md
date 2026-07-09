@@ -98,6 +98,7 @@ Behavior:
 
 - implementation lane re-runs non-live gates, commits, pushes, and creates or updates the GitHub PR;
 - if the PR issue carries `release-required`, the PR stage is not complete until the PR is publishable and merged;
+- PR and release follow-up issues should start with a deterministic preflight command that validates source metadata before broader agent work;
 - review lane verifies the PR stage artifacts;
 - when review passes:
   - if the source chain does not need release publication, the PR issue ends at `Done`;

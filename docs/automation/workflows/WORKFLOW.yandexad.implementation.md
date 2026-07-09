@@ -157,6 +157,9 @@ Do not:
 
 Do:
 
+- start with deterministic preflight before any broad repo inspection:
+  - `python scripts/followup_preflight.py --issue-id {{ issue.identifier }} --stage pr`
+  - if preflight returns `ok=false`, do not keep exploring the repo; write the blocker into `SYMPHONY_WORK_RESULT.md`, leave one concise Linear comment, and move the issue to `Backlog` or `Todo` according to the blocker type
 - satisfy `PR Validation` from the issue body.
 
 Default fallback only when the issue body does not define `PR Validation`:
@@ -217,6 +220,9 @@ Only proceed if the issue is explicitly a release issue and carries `release-req
 
 Do:
 
+- start with deterministic preflight before any release work:
+  - `python scripts/followup_preflight.py --issue-id {{ issue.identifier }} --stage release`
+  - if preflight returns `ok=false`, do not continue; write the blocker into `SYMPHONY_WORK_RESULT.md`, leave one concise Linear comment, and move the issue to `Backlog`
 - satisfy `Release Validation` from the issue body.
 
 Default fallback only when the issue body does not define `Release Validation`:

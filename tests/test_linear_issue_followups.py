@@ -58,6 +58,9 @@ def test_followup_description_for_pr_contains_pr_contract() -> None:
     assert "## Execution Profile" in body
     assert "- Issue Class: feature" in body
     assert "- Source workspace: `/tmp/symphony/GEO-7`" in body
+    assert "## Symphony Preflight Metadata" in body
+    assert "source_issue: GEO-7" in body
+    assert "source_workspace: /tmp/symphony/GEO-7" in body
     assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_PATCH.diff" in body
     assert "do not continue this PR stage" in body
@@ -70,12 +73,15 @@ def test_followup_description_for_pr_contains_pr_contract() -> None:
 def test_followup_description_for_release_contains_release_contract() -> None:
     body = linear_issue.followup_description(
         "release",
-        _issue(["symphony", "issue-type:pr", "release-required"]),
+        _issue_with_identifier("GEO-8", ["symphony", "issue-type:pr", "release-required"]),
         linear_issue.Path("/tmp/symphony/GEO-8"),
     )
     assert "## Execution Profile" in body
     assert "- Issue Class: release" in body
     assert "- Risk: high" in body
+    assert "## Symphony Preflight Metadata" in body
+    assert "source_issue: GEO-8" in body
+    assert "required_pr_merge: yes" in body
     assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_HANDOFF.md" in body
     assert "GitHub Release exists." in body

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -28,6 +29,7 @@ LINEAR_ENDPOINT = "https://api.linear.app/graphql"
 ISSUE_TYPE_PREFIX = "issue-type:"
 FOLLOWUP_LABEL = "generated-followup"
 RELEASE_REQUIRED_LABEL = "release-required"
+FOLLOWUP_METADATA_HEADER = "## Symphony Preflight Metadata"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -83,6 +85,58 @@ def verify_release_source_metadata(source_workspace: Path) -> None:
         raise SystemExit(
             "PR stage is not publishable for release follow-up; missing metadata: " + ", ".join(missing)
         )
+
+
+def render_followup_metadata(stage: str, source_issue: dict[str, Any], source_workspace: Path) -> str:
+    release_required = (
+        "yes" if RELEASE_REQUIRED_LABEL in {name.strip().lower() for name in issue_label_names(source_issue)} else "no"
+    )
+    source_stage = classify_issue_type(issue_label_names(source_issue))
+    lines = [
+        FOLLOWUP_METADATA_HEADER,
+        "```text",
+        f"stage: {stage}",
+        f"source_issue: {source_issue['identifier']}",
+        f"source_stage: {source_stage}",
+        f"source_workspace: {source_workspace}",
+        "required_review_outcome: approved",
+        f"release_required: {release_required}",
+    ]
+    if stage == "release":
+        lines.append("required_pr_merge: yes")
+    lines.extend(["```", ""])
+    return "\n".join(lines)
+
+
+def parse_followup_metadata(description: str) -> dict[str, str]:
+    metadata: dict[str, str] = {}
+
+    block_match = re.search(
+        rf"{re.escape(FOLLOWUP_METADATA_HEADER)}\s+```(?:text)?\n(.*?)```",
+        description,
+        flags=re.DOTALL,
+    )
+    if block_match:
+        for raw_line in block_match.group(1).splitlines():
+            line = raw_line.strip()
+            if not line or ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            metadata[key.strip()] = value.strip()
+
+    fallback_patterns = {
+        "source_issue": r"- Identifier:\s*([A-Z]+-\d+)",
+        "source_workspace": r"- Source workspace:\s*`([^`]+)`",
+        "source_stage": r"- Source type:\s*([a-z_]+)",
+    }
+    for key, pattern in fallback_patterns.items():
+        if key in metadata:
+            continue
+        match = re.search(pattern, description)
+        if match:
+            metadata[key] = match.group(1).strip()
+
+    return metadata
 
 
 def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -> Path:
@@ -556,6 +610,7 @@ def followup_description(stage: str, source_issue: dict[str, Any], source_worksp
         f"- Source labels: {source_label_list}",
         f"- Source workspace: `{source_workspace_text}`",
         "",
+        render_followup_metadata(stage, source_issue, workspace_path),
         "## Required Handoff Artifacts",
         "- `SYMPHONY_WORK_RESULT.md` from the source workspace is mandatory.",
         "- `SYMPHONY_HANDOFF.json` from the source workspace is mandatory.",

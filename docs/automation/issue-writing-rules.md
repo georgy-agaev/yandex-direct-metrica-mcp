@@ -132,6 +132,7 @@ When the stage produces code or metadata that a later stage must continue from a
 - feature stage: `SYMPHONY_STAGE_HANDOFF.md` and `SYMPHONY_STAGE_PATCH.diff`
 - PR stage: `SYMPHONY_STAGE_HANDOFF.md`
 - release stage: stage-complete `SYMPHONY_HANDOFF.json`
+- follow-up issues generated from a previous stage should include a machine-readable `Symphony Preflight Metadata` block in the issue body
 
 The issue body should make the cycle contract explicit:
 
