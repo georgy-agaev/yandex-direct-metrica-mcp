@@ -678,6 +678,7 @@ def followup_description(stage: str, source_issue: dict[str, Any], source_worksp
                 "- Run `python scripts/release_followup.py --issue-id {{ issue.identifier }}` immediately after release preflight.",
                 "- Do not improvise a release sequence if the runner can execute it.",
                 "- Default versioning policy is the next patch version from `pyproject.toml` unless the issue body explicitly overrides it.",
+                "- If the runner fails but writes `SYMPHONY_WORK_RESULT.md` and `SYMPHONY_HANDOFF.json`, use those artifacts directly for the stage outcome.",
                 "",
                 "## Scope",
                 "- Read and follow the source-stage handoff before changing release metadata.",

@@ -49,6 +49,13 @@ class WorkflowRun:
     url: str
 
 
+@dataclass(frozen=True)
+class ReleaseStepError(Exception):
+    step: str
+    message: str
+    external: bool
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--issue-id", required=True, help="Linear release issue identifier, for example GEO-17")
@@ -142,6 +149,22 @@ def ensure_repo_ready_for_release() -> None:
         raise SystemExit(
             "Release follow-up found unexpected dirty paths: " + ", ".join(unexpected)
         )
+
+
+def command_details(exc: subprocess.CalledProcessError) -> str:
+    if exc.stderr:
+        return exc.stderr.strip()
+    if exc.stdout:
+        return exc.stdout.strip()
+    return str(exc)
+
+
+def run_step(command: list[str], *, label: str, external: bool, passed: list[str]) -> None:
+    try:
+        run(command)
+    except subprocess.CalledProcessError as exc:
+        raise ReleaseStepError(label, command_details(exc), external) from exc
+    passed.append(label)
 
 
 def replace_project_version(target_version: str) -> None:
@@ -272,7 +295,10 @@ def ensure_remote_tag(tag: str, commit_sha: str) -> None:
     ensure_local_tag(tag, commit_sha)
     if remote_tag_exists(tag):
         return
-    run(["git", "push", "origin", tag])
+    try:
+        run(["git", "push", "origin", tag])
+    except subprocess.CalledProcessError as exc:
+        raise ReleaseStepError(f"git push origin {tag}", command_details(exc), True) from exc
 
 
 def workflow_runs(workflow: str, *, branch: str | None = None, commit: str | None = None) -> list[WorkflowRun]:
@@ -293,7 +319,10 @@ def workflow_runs(workflow: str, *, branch: str | None = None, commit: str | Non
         command.extend(["--branch", branch])
     if commit:
         command.extend(["--commit", commit])
-    data = json.loads(run(command, capture_output=True).stdout or "[]")
+    try:
+        data = json.loads(run(command, capture_output=True).stdout or "[]")
+    except subprocess.CalledProcessError as exc:
+        raise ReleaseStepError(f"gh run list ({workflow})", command_details(exc), True) from exc
     return [
         WorkflowRun(
             workflow=item["workflowName"],
@@ -324,12 +353,20 @@ def wait_for_workflow(
             if last_seen.status == "completed":
                 if last_seen.conclusion == "success":
                     return last_seen
-                raise SystemExit(f"Workflow failed: {workflow} -> {last_seen.conclusion} ({last_seen.url})")
+                raise ReleaseStepError(
+                    workflow,
+                    f"Workflow failed: {workflow} -> {last_seen.conclusion} ({last_seen.url})",
+                    False,
+                )
         time.sleep(poll_interval)
     if last_seen:
-        raise SystemExit(f"Workflow timed out: {workflow} status={last_seen.status} ({last_seen.url})")
+        raise ReleaseStepError(
+            workflow,
+            f"Workflow timed out: {workflow} status={last_seen.status} ({last_seen.url})",
+            True,
+        )
     locator = f"branch={branch}" if branch else f"commit={commit}"
-    raise SystemExit(f"Workflow did not appear: {workflow} ({locator})")
+    raise ReleaseStepError(workflow, f"Workflow did not appear: {workflow} ({locator})", True)
 
 
 def ensure_github_release(tag: str, release_note: Path) -> str:
@@ -341,26 +378,32 @@ def ensure_github_release(tag: str, release_note: Path) -> str:
     )
     if view.returncode == 0:
         return json.loads(view.stdout)["url"]
-    run(
-        [
-            "gh",
-            "release",
-            "create",
-            tag,
-            "--verify-tag",
-            "--latest",
-            "--title",
-            tag,
-            "--notes-file",
-            str(release_note),
-        ]
-    )
-    return json.loads(gh_output("release", "view", tag, "--json", "url"))["url"]
+    try:
+        run(
+            [
+                "gh",
+                "release",
+                "create",
+                tag,
+                "--verify-tag",
+                "--latest",
+                "--title",
+                tag,
+                "--notes-file",
+                str(release_note),
+            ]
+        )
+        return json.loads(gh_output("release", "view", tag, "--json", "url"))["url"]
+    except subprocess.CalledProcessError as exc:
+        raise ReleaseStepError(f"gh release create {tag}", command_details(exc), True) from exc
 
 
 def ghcr_login(owner: str) -> None:
-    token = gh_output("auth", "token")
-    run(["docker", "login", "ghcr.io", "-u", owner, "--password-stdin"], input_text=token + "\n")
+    try:
+        token = gh_output("auth", "token")
+        run(["docker", "login", "ghcr.io", "-u", owner, "--password-stdin"], input_text=token + "\n")
+    except subprocess.CalledProcessError as exc:
+        raise ReleaseStepError("docker login ghcr.io", command_details(exc), True) from exc
 
 
 def write_success_artifacts(
@@ -456,117 +499,265 @@ def write_success_artifacts(
     )
 
 
+def failure_route(step: str, message: str, *, external: bool) -> tuple[str, str, str]:
+    lower = f"{step}\n{message}".lower()
+    if external:
+        return ("Backlog", "blocked", "operator")
+    code_markers = (
+        "pytest",
+        "compileall",
+        "agent_lint",
+        "release_guard",
+        "changelog",
+        "pyproject",
+        "release note",
+        "docs/releases",
+        "dirty paths",
+        "workflow failed",
+    )
+    if any(marker in lower for marker in code_markers):
+        return ("Todo", "needs_changes", "implementation")
+    return ("Backlog", "blocked", "operator")
+
+
+def write_failure_artifacts(
+    *,
+    issue_id: str,
+    issue_title: str,
+    source_issue: str | None,
+    target_version: str | None,
+    step: str,
+    message: str,
+    validations_passed: list[str],
+    external: bool,
+) -> None:
+    to_state, status, next_actor = failure_route(step, message, external=external)
+    summary = f"Release runner failed at `{step}`."
+    (ROOT / "SYMPHONY_WORK_RESULT.md").write_text(
+        "\n".join(
+            [
+                f"# {issue_id} Work Result",
+                "",
+                "## Stage",
+                "",
+                "Release implementation.",
+                "",
+                "## Result",
+                "",
+                summary,
+                "",
+                "## Blocker",
+                "",
+                message,
+                "",
+                "## Context",
+                "",
+                *([f"- Source issue: `{source_issue}`"] if source_issue else []),
+                *([f"- Target version: `{target_version}`"] if target_version else []),
+                f"- Suggested Linear state: `{to_state}`",
+                f"- Suggested next actor: `{next_actor}`",
+                "",
+                "## Validation Passed Before Failure",
+                "",
+                *([f"- `{item}`" for item in validations_passed] if validations_passed else ["- None"]),
+                "",
+            ]
+        ).rstrip()
+        + "\n",
+        encoding="utf-8",
+    )
+    handoff = {
+        "schema_version": 1,
+        "issue": {"identifier": issue_id, "title": issue_title},
+        "stage": {"type": "release", "role": "implementation"},
+        "transition": {"from_state": "In Progress", "to_state": to_state, "status": status},
+        "cycle": {"iteration": 1, "max_iterations": 3},
+        "summary": summary,
+        "artifacts": [
+            "SYMPHONY_WORK_RESULT.md",
+            "SYMPHONY_HANDOFF.json",
+        ],
+        "validation": {"passed": validations_passed or [f"runner-started: {step}"]},
+        "next_actor": next_actor,
+        "blockers": [message],
+    }
+    (ROOT / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps(handoff, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def main() -> int:
     args = parse_args()
     api_key = os.environ.get("LINEAR_API_KEY")
     if not api_key:
         raise SystemExit("LINEAR_API_KEY is required")
 
-    ensure_repo_ready_for_release()
-
     issue = linear_issue.get_issue(api_key, args.issue_id)
-    if linear_issue.classify_issue_type(linear_issue.issue_label_names(issue)) != "release":
-        raise SystemExit(f"Issue {args.issue_id} is not a release issue")
+    target_version: str | None = None
+    source_issue: str | None = None
+    validations_passed: list[str] = []
+    try:
+        ensure_repo_ready_for_release()
 
-    preflight = followup_preflight.preflight(issue, "release")
-    target_version = resolve_target_version(args.version)
-    release_date = date.today().isoformat()
-    source_issue = preflight["source_issue"]
-    pr_url = preflight["pr_url"]
+        if linear_issue.classify_issue_type(linear_issue.issue_label_names(issue)) != "release":
+            raise ReleaseStepError("issue classification", f"Issue {args.issue_id} is not a release issue", False)
 
-    replace_project_version(target_version)
-    release_body = update_changelog_for_release(target_version, release_date)
-    validations = [
-        "python -m compileall -q src/mcp_yandex_ad",
-        "pytest -q",
-        "python scripts/agent_lint.py",
-        "python scripts/live_validation.py --suite direct,metrica,wordstat,search",
-        f"python scripts/release_guard.py --version {target_version} --require-release-notes",
-    ]
-    release_note = write_release_notes(
-        target_version,
-        release_date,
-        release_body,
-        issue_identifier=args.issue_id,
-        source_issue=source_issue,
-        pr_url=pr_url,
-        validations=validations,
-    )
+        try:
+            preflight = followup_preflight.preflight(issue, "release")
+        except SystemExit as exc:
+            raise ReleaseStepError("followup_preflight", str(exc), True) from exc
 
-    for command in (
-        [sys.executable, "-m", "compileall", "-q", "src/mcp_yandex_ad"],
-        [sys.executable, "scripts/agent_lint.py"],
-        [sys.executable, "scripts/live_validation.py", "--suite", "direct,metrica,wordstat,search"],
-        [sys.executable, "scripts/release_guard.py", "--version", target_version, "--require-release-notes"],
-    ):
-        run(command)
-    run([sys.executable, "-m", "pytest", "-q"])
+        target_version = resolve_target_version(args.version)
+        release_date = date.today().isoformat()
+        source_issue = preflight["source_issue"]
+        pr_url = preflight["pr_url"]
 
-    commit_sha = git_commit_if_needed(target_version, release_note)
-    if not remote_tag_exists(f"v{target_version}") or not remote_tag_exists(f"pro-v{target_version}"):
-        run(["git", "push", "origin", "HEAD:main"])
-    ensure_remote_tag(f"v{target_version}", commit_sha)
-    ensure_remote_tag(f"pro-v{target_version}", commit_sha)
-
-    workflows = {
-        "CI": wait_for_workflow(
-            "CI",
-            commit=commit_sha,
-            timeout_seconds=args.timeout_seconds,
-            poll_interval=args.poll_interval,
-        ),
-        "Docker Publish (Public)": wait_for_workflow(
-            "Docker Publish (Public)",
-            branch=f"v{target_version}",
-            timeout_seconds=args.timeout_seconds,
-            poll_interval=args.poll_interval,
-        ),
-        "Docker Publish (Pro)": wait_for_workflow(
-            "Docker Publish (Pro)",
-            branch=f"pro-v{target_version}",
-            timeout_seconds=args.timeout_seconds,
-            poll_interval=args.poll_interval,
-        ),
-        "GitHub Release": wait_for_workflow(
-            "GitHub Release",
-            branch=f"v{target_version}",
-            timeout_seconds=args.timeout_seconds,
-            poll_interval=args.poll_interval,
-        ),
-    }
-
-    release_url = ensure_github_release(f"v{target_version}", release_note)
-
-    local_docker_sync = False
-    if not args.skip_local_docker_sync:
-        ghcr_login(args.owner)
-        command = [
-            sys.executable,
-            "scripts/sync_local_docker_release.py",
-            "--version",
-            target_version,
-            "--owner",
-            args.owner,
+        replace_project_version(target_version)
+        release_body = update_changelog_for_release(target_version, release_date)
+        validations = [
+            "python -m compileall -q src/mcp_yandex_ad",
+            "pytest -q",
+            "python scripts/agent_lint.py",
+            "python scripts/live_validation.py --suite direct,metrica,wordstat,search",
+            f"python scripts/release_guard.py --version {target_version} --require-release-notes",
         ]
-        if args.include_pro:
-            command.append("--include-pro")
-        run(command)
-        local_docker_sync = True
+        release_note = write_release_notes(
+            target_version,
+            release_date,
+            release_body,
+            issue_identifier=args.issue_id,
+            source_issue=source_issue,
+            pr_url=pr_url,
+            validations=validations,
+        )
 
-    write_success_artifacts(
-        issue_id=args.issue_id,
-        issue_title=issue["title"],
-        target_version=target_version,
-        source_issue=source_issue,
-        pr_url=pr_url,
-        release_url=release_url,
-        commit_sha=commit_sha,
-        validations=validations,
-        workflows=workflows,
-        local_docker_sync=local_docker_sync,
-    )
-    print(json.dumps({"ok": True, "version": target_version, "release_url": release_url}, ensure_ascii=False))
-    return 0
+        run_step(
+            [sys.executable, "-m", "compileall", "-q", "src/mcp_yandex_ad"],
+            label="python -m compileall -q src/mcp_yandex_ad",
+            external=False,
+            passed=validations_passed,
+        )
+        run_step([sys.executable, "-m", "pytest", "-q"], label="pytest -q", external=False, passed=validations_passed)
+        run_step(
+            [sys.executable, "scripts/agent_lint.py"],
+            label="python scripts/agent_lint.py",
+            external=False,
+            passed=validations_passed,
+        )
+        run_step(
+            [sys.executable, "scripts/live_validation.py", "--suite", "direct,metrica,wordstat,search"],
+            label="python scripts/live_validation.py --suite direct,metrica,wordstat,search",
+            external=True,
+            passed=validations_passed,
+        )
+        run_step(
+            [sys.executable, "scripts/release_guard.py", "--version", target_version, "--require-release-notes"],
+            label=f"python scripts/release_guard.py --version {target_version} --require-release-notes",
+            external=False,
+            passed=validations_passed,
+        )
+
+        commit_sha = git_commit_if_needed(target_version, release_note)
+        if not remote_tag_exists(f"v{target_version}") or not remote_tag_exists(f"pro-v{target_version}"):
+            try:
+                run(["git", "push", "origin", "HEAD:main"])
+            except subprocess.CalledProcessError as exc:
+                raise ReleaseStepError("git push origin HEAD:main", command_details(exc), True) from exc
+        ensure_remote_tag(f"v{target_version}", commit_sha)
+        ensure_remote_tag(f"pro-v{target_version}", commit_sha)
+
+        workflows = {
+            "CI": wait_for_workflow(
+                "CI",
+                commit=commit_sha,
+                timeout_seconds=args.timeout_seconds,
+                poll_interval=args.poll_interval,
+            ),
+            "Docker Publish (Public)": wait_for_workflow(
+                "Docker Publish (Public)",
+                branch=f"v{target_version}",
+                timeout_seconds=args.timeout_seconds,
+                poll_interval=args.poll_interval,
+            ),
+            "Docker Publish (Pro)": wait_for_workflow(
+                "Docker Publish (Pro)",
+                branch=f"pro-v{target_version}",
+                timeout_seconds=args.timeout_seconds,
+                poll_interval=args.poll_interval,
+            ),
+            "GitHub Release": wait_for_workflow(
+                "GitHub Release",
+                branch=f"v{target_version}",
+                timeout_seconds=args.timeout_seconds,
+                poll_interval=args.poll_interval,
+            ),
+        }
+
+        release_url = ensure_github_release(f"v{target_version}", release_note)
+
+        local_docker_sync = False
+        if not args.skip_local_docker_sync:
+            ghcr_login(args.owner)
+            command = [
+                sys.executable,
+                "scripts/sync_local_docker_release.py",
+                "--version",
+                target_version,
+                "--owner",
+                args.owner,
+            ]
+            if args.include_pro:
+                command.append("--include-pro")
+            run_step(
+                command,
+                label=(
+                    f"python scripts/sync_local_docker_release.py --version {target_version} --owner {args.owner}"
+                    + (" --include-pro" if args.include_pro else "")
+                ),
+                external=True,
+                passed=validations_passed,
+            )
+            local_docker_sync = True
+
+        write_success_artifacts(
+            issue_id=args.issue_id,
+            issue_title=issue["title"],
+            target_version=target_version,
+            source_issue=source_issue,
+            pr_url=pr_url,
+            release_url=release_url,
+            commit_sha=commit_sha,
+            validations=validations_passed,
+            workflows=workflows,
+            local_docker_sync=local_docker_sync,
+        )
+        print(json.dumps({"ok": True, "version": target_version, "release_url": release_url}, ensure_ascii=False))
+        return 0
+    except ReleaseStepError as exc:
+        write_failure_artifacts(
+            issue_id=args.issue_id,
+            issue_title=issue["title"],
+            source_issue=source_issue,
+            target_version=target_version,
+            step=exc.step,
+            message=exc.message,
+            validations_passed=validations_passed,
+            external=exc.external,
+        )
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "issue": args.issue_id,
+                    "step": exc.step,
+                    "external": exc.external,
+                    "message": exc.message,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 2
 
 
 if __name__ == "__main__":

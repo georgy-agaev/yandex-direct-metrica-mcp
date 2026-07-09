@@ -227,6 +227,7 @@ Do:
   - `python scripts/release_followup.py --issue-id {{ issue.identifier }} --include-pro`
   - this command owns version bumping, release-note generation, local gates, live validation, tag push, workflow verification, GitHub Release verification, and local Docker alias refresh;
   - if it succeeds, use the generated `SYMPHONY_WORK_RESULT.md`, `SYMPHONY_HANDOFF.json`, and `RELEASE_SUMMARY.json` as the stage truth;
+  - if it fails and still writes `SYMPHONY_WORK_RESULT.md` plus `SYMPHONY_HANDOFF.json`, use those artifacts directly for the Linear comment/state transition instead of re-explaining the traceback;
   - do not replace this with ad hoc release reasoning unless the script itself is what needs repair
 - satisfy `Release Validation` from the issue body.
 

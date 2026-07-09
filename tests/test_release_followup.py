@@ -87,3 +87,21 @@ def test_ensure_repo_ready_for_release_rejects_unexpected_paths(monkeypatch: pyt
 
     with pytest.raises(SystemExit, match="unexpected dirty paths"):
         release_followup.ensure_repo_ready_for_release()
+
+
+def test_failure_route_marks_live_validation_as_external() -> None:
+    route = release_followup.failure_route(
+        "python scripts/live_validation.py --suite direct,metrica,wordstat,search",
+        "Direct API unavailable",
+        external=True,
+    )
+    assert route == ("Backlog", "blocked", "operator")
+
+
+def test_failure_route_marks_metadata_drift_as_todo() -> None:
+    route = release_followup.failure_route(
+        "python scripts/release_guard.py --version 2.0.14 --require-release-notes",
+        "CHANGELOG missing release heading for 2.0.14",
+        external=False,
+    )
+    assert route == ("Todo", "needs_changes", "implementation")
