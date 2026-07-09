@@ -22,8 +22,9 @@ DEFAULT_CONFIG = Path("/Users/georgyagaev/Projects/Symphony_yaad/linear.yandexad
 DEFAULT_SYMPHONY_ROOT = Path(
     os.environ.get("SYMPHONY_ROOT", str(Path.home() / "Projects" / "Symphony_yaad"))
 ).expanduser()
+LEGACY_WORKSPACE_ROOT = DEFAULT_SYMPHONY_ROOT / "workspaces"
 DEFAULT_WORKSPACE_ROOT = Path(
-    os.environ.get("SYMPHONY_WORKSPACE_ROOT", str(DEFAULT_SYMPHONY_ROOT / "workspaces"))
+    os.environ.get("SYMPHONY_WORKSPACE_ROOT", "/private/tmp/symphony_yandexad_workspaces")
 ).expanduser()
 LINEAR_ENDPOINT = "https://api.linear.app/graphql"
 ISSUE_TYPE_PREFIX = "issue-type:"
@@ -45,27 +46,40 @@ def source_workspace_path(issue_identifier: str) -> Path:
     return DEFAULT_WORKSPACE_ROOT / issue_identifier
 
 
-def candidate_source_workspaces(issue_identifier: str) -> list[Path]:
-    source_workspace = source_workspace_path(issue_identifier).expanduser()
-    candidates: list[Path] = []
-    if source_workspace.exists():
-        candidates.append(source_workspace.resolve())
-    parent = source_workspace.parent
-    pattern = f"{source_workspace.name}*"
-    globbed = [candidate.resolve() for candidate in parent.glob(pattern) if candidate.is_dir()]
-    seen: set[str] = set()
+def workspace_roots_for_lookup() -> list[Path]:
+    roots = [DEFAULT_WORKSPACE_ROOT, LEGACY_WORKSPACE_ROOT]
     deduped: list[Path] = []
-    for candidate in sorted(globbed, key=lambda path: path.stat().st_mtime, reverse=True):
-        key = str(candidate)
+    seen: set[str] = set()
+    for root in roots:
+        key = str(root.expanduser())
         if key in seen:
             continue
         seen.add(key)
-        deduped.append(candidate)
-    if candidates:
-        current = str(candidates[0])
-        deduped = [path for path in deduped if str(path) != current]
-        return candidates + deduped
+        deduped.append(root.expanduser())
     return deduped
+
+
+def candidate_source_workspaces(issue_identifier: str) -> list[Path]:
+    candidates: list[Path] = []
+    seen: set[str] = set()
+    for root in workspace_roots_for_lookup():
+        source_workspace = (root / issue_identifier).expanduser()
+        if source_workspace.exists():
+            resolved = source_workspace.resolve()
+            key = str(resolved)
+            if key not in seen:
+                seen.add(key)
+                candidates.append(resolved)
+        parent = source_workspace.parent
+        pattern = f"{source_workspace.name}*"
+        globbed = [candidate.resolve() for candidate in parent.glob(pattern) if candidate.is_dir()]
+        for candidate in sorted(globbed, key=lambda path: path.stat().st_mtime, reverse=True):
+            key = str(candidate)
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(candidate)
+    return candidates
 
 
 def verify_release_source_metadata(source_workspace: Path) -> None:

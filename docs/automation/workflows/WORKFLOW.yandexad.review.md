@@ -13,7 +13,7 @@ tracker:
     - Cancelled
     - Duplicate
 workspace:
-  root: <symphony-root>/workspaces
+  root: <workspace-root>
 hooks:
   after_create: |
     git clone --depth 1 https://github.com/georgy-agaev/yandex-direct-metrica-mcp.git .

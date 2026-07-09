@@ -135,6 +135,19 @@ def test_source_workspace_path_uses_env_override(monkeypatch) -> None:
         linear_issue.DEFAULT_WORKSPACE_ROOT = original
 
 
+def test_candidate_source_workspaces_checks_legacy_root(monkeypatch, tmp_path) -> None:
+    current_root = tmp_path / "current"
+    legacy_root = tmp_path / "legacy"
+    legacy_workspace = legacy_root / "GEO-99"
+    legacy_workspace.mkdir(parents=True)
+    monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", current_root)
+    monkeypatch.setattr(linear_issue, "LEGACY_WORKSPACE_ROOT", legacy_root)
+
+    candidates = linear_issue.candidate_source_workspaces("GEO-99")
+
+    assert candidates == [legacy_workspace.resolve()]
+
+
 def test_find_generated_followup_issue_prefers_stage_and_source_identifier(monkeypatch) -> None:
     def fake_graphql(_api_key: str, _query: str, _variables: dict) -> dict:
         return {

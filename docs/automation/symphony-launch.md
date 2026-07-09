@@ -31,9 +31,10 @@ If a live-validation command still reports missing Search API credentials, the i
 Set explicit runtime roots before launch:
 
 - `SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad`
-- `SYMPHONY_WORKSPACE_ROOT=$SYMPHONY_ROOT/workspaces`
+- `SYMPHONY_WORKSPACE_ROOT=/private/tmp/symphony_yandexad_workspaces`
 
 Do not run the copied workflow files with a literal `<symphony-root>` placeholder. Render them first.
+Do not place live Symphony git workspaces under `~/Projects/Symphony_yaad/workspaces`; Codex cannot write the git index there during release follow-up.
 
 ## Codex runtime
 
@@ -54,8 +55,8 @@ Reason:
 
 ```bash
 export SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad
-export SYMPHONY_WORKSPACE_ROOT="$SYMPHONY_ROOT/workspaces"
-python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT"
+export SYMPHONY_WORKSPACE_ROOT=/private/tmp/symphony_yandexad_workspaces
+python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT" --workspace-root "$SYMPHONY_WORKSPACE_ROOT"
 cd "$SYMPHONY_ROOT"/symphony/elixir
 mkdir -p "$SYMPHONY_ROOT"/logs "$SYMPHONY_WORKSPACE_ROOT"
 set -a
@@ -74,8 +75,8 @@ set +a
 
 ```bash
 export SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad
-export SYMPHONY_WORKSPACE_ROOT="$SYMPHONY_ROOT/workspaces"
-python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT"
+export SYMPHONY_WORKSPACE_ROOT=/private/tmp/symphony_yandexad_workspaces
+python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT" --workspace-root "$SYMPHONY_WORKSPACE_ROOT"
 cd "$SYMPHONY_ROOT"/symphony/elixir
 mkdir -p "$SYMPHONY_ROOT"/logs "$SYMPHONY_WORKSPACE_ROOT"
 set -a
@@ -96,8 +97,8 @@ When the repo workflow files change, refresh the external Symphony copies:
 
 ```bash
 export SYMPHONY_ROOT=/absolute/path/to/Symphony_yaad
-export SYMPHONY_WORKSPACE_ROOT="$SYMPHONY_ROOT/workspaces"
-python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT"
+export SYMPHONY_WORKSPACE_ROOT=/private/tmp/symphony_yandexad_workspaces
+python scripts/render_symphony_workflows.py --symphony-root "$SYMPHONY_ROOT" --workspace-root "$SYMPHONY_WORKSPACE_ROOT"
 ```
 
 ## Expected Runtime Behavior

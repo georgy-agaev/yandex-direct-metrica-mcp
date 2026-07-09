@@ -19,6 +19,7 @@ from dotenv import dotenv_values
 
 
 DEFAULT_SYMPHONY_ROOT = Path("/Users/georgyagaev/Projects/Symphony_yaad")
+DEFAULT_WORKSPACE_ROOT = Path("/private/tmp/symphony_yandexad_workspaces")
 DEFAULT_STATE_ENV = Path("/Users/georgyagaev/mcp/state/yandex.ad/.env")
 DEFAULT_CODEX_HOME = Path.home() / ".codex-symphony"
 LANES: dict[str, dict[str, object]] = {
@@ -53,6 +54,7 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated lane names; default: implementation,review",
     )
     parser.add_argument("--symphony-root", type=Path, default=DEFAULT_SYMPHONY_ROOT)
+    parser.add_argument("--workspace-root", type=Path, default=DEFAULT_WORKSPACE_ROOT)
     parser.add_argument("--state-env", type=Path, default=DEFAULT_STATE_ENV)
     parser.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
     parser.add_argument("--keep-deprecated", action="store_true")
@@ -107,7 +109,7 @@ def stop_pid(path: Path) -> bool:
     return True
 
 
-def build_env(symphony_root: Path, state_env: Path, codex_home: Path) -> dict[str, str]:
+def build_env(symphony_root: Path, workspace_root: Path, state_env: Path, codex_home: Path) -> dict[str, str]:
     env = os.environ.copy()
     root_env = symphony_root / ".env"
     for source in (root_env, state_env):
@@ -116,20 +118,27 @@ def build_env(symphony_root: Path, state_env: Path, codex_home: Path) -> dict[st
                 if value is not None:
                     env[key] = value
     env["SYMPHONY_ROOT"] = str(symphony_root)
-    env["SYMPHONY_WORKSPACE_ROOT"] = str(symphony_root / "workspaces")
+    env["SYMPHONY_WORKSPACE_ROOT"] = str(workspace_root)
     env["CODEX_HOME"] = str(codex_home.expanduser())
     return env
 
 
-def render_workflows(repo_root: Path, symphony_root: Path) -> None:
+def render_workflows(repo_root: Path, symphony_root: Path, workspace_root: Path) -> None:
     subprocess.run(
-        [sys.executable, "scripts/render_symphony_workflows.py", "--symphony-root", str(symphony_root)],
+        [
+            sys.executable,
+            "scripts/render_symphony_workflows.py",
+            "--symphony-root",
+            str(symphony_root),
+            "--workspace-root",
+            str(workspace_root),
+        ],
         cwd=repo_root,
         check=True,
     )
 
 
-def start_lane(repo_root: Path, symphony_root: Path, env: dict[str, str], lane: str) -> int:
+def start_lane(repo_root: Path, symphony_root: Path, workspace_root: Path, env: dict[str, str], lane: str) -> int:
     config = LANES[lane]
     log_root = symphony_root / "logs"
     workflow = symphony_root / "workflows" / str(config["workflow"])
@@ -137,7 +146,7 @@ def start_lane(repo_root: Path, symphony_root: Path, env: dict[str, str], lane: 
     stdout_log = log_root / str(config["stdout_log"])
     pid_file = log_root / str(config["pid_file"])
     log_root.mkdir(parents=True, exist_ok=True)
-    (symphony_root / "workspaces").mkdir(parents=True, exist_ok=True)
+    workspace_root.mkdir(parents=True, exist_ok=True)
     with stdout_log.open("ab") as stdout_handle, script_log.open("ab") as stderr_handle:
         process = subprocess.Popen(
             [
@@ -184,13 +193,14 @@ def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parent.parent
     symphony_root = args.symphony_root.expanduser().resolve()
+    workspace_root = args.workspace_root.expanduser().resolve()
     state_env = args.state_env.expanduser().resolve()
     codex_home = args.codex_home.expanduser().resolve()
     log_root = symphony_root / "logs"
     lanes = lane_names(args.lanes)
 
     if args.command == "render":
-        render_workflows(repo_root, symphony_root)
+        render_workflows(repo_root, symphony_root, workspace_root)
         return 0
 
     if args.command in {"stop", "restart"}:
@@ -205,10 +215,10 @@ def main() -> int:
     if args.command == "status":
         return status(log_root, lanes, args.keep_deprecated)
 
-    render_workflows(repo_root, symphony_root)
-    env = build_env(symphony_root, state_env, codex_home)
+    render_workflows(repo_root, symphony_root, workspace_root)
+    env = build_env(symphony_root, workspace_root, state_env, codex_home)
     for lane in lanes:
-        pid = start_lane(repo_root, symphony_root, env, lane)
+        pid = start_lane(repo_root, symphony_root, workspace_root, env, lane)
         print(f"{lane} pid={pid}")
     return 0
 
