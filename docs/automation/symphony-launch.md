@@ -34,7 +34,7 @@ Set explicit runtime roots before launch:
 - `SYMPHONY_WORKSPACE_ROOT=/private/tmp/symphony_yandexad_workspaces`
 
 Do not run the copied workflow files with a literal `<symphony-root>` placeholder. Render them first.
-Do not place live Symphony git workspaces under `~/Projects/Symphony_yaad/workspaces`; Codex cannot write the git index there during release follow-up.
+Do not place live Symphony git workspaces under a home-directory project path such as `<your-home>/Projects/Symphony_yaad/workspaces`; Codex cannot write the git index there during release follow-up.
 
 ## Codex runtime
 
