@@ -47,7 +47,8 @@ Decide the stage from labels:
 - otherwise -> `feature`
 
 Start of every pass:
-1. If the issue is `Todo`, move it to `In Progress`.
+1. If the issue is `Todo`, run:
+   - `.venv/bin/python scripts/linear_state.py move --issue-id {{ issue.identifier }} --to "In Progress" --by implementation --expect Todo`
 2. Work only inside this isolated workspace.
 3. Run:
    - `.venv/bin/python scripts/stage.py context --lane implementation --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --state "{{ issue.state }}"`
@@ -65,6 +66,7 @@ Feature stage:
   - `SYMPHONY_STAGE_PATCH.diff`
 - before leaving the stage, run:
   - `.venv/bin/python scripts/stage.py implementation-ready --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --summary "<concise summary>" --validation "<command that passed>" --artifact SYMPHONY_STAGE_HANDOFF.md --artifact SYMPHONY_STAGE_PATCH.diff`
+  - this command writes handoff artifacts and performs the guarded `In Progress -> In Review` move through `scripts/linear_state.py`
 
 PR stage:
 - start with:
@@ -78,6 +80,7 @@ PR stage:
   - `SYMPHONY_STAGE_HANDOFF.md`
 - before leaving the stage, run:
   - `.venv/bin/python scripts/stage.py implementation-ready --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --summary "<concise summary>" --validation "<command that passed>" --artifact SYMPHONY_STAGE_HANDOFF.md`
+  - this command writes handoff artifacts and performs the guarded `In Progress -> In Review` move through `scripts/linear_state.py`
 
 Release stage:
 - start with:
@@ -90,6 +93,7 @@ Release stage:
 Blocking:
 - for missing external credentials, missing operator input, or manual validation that is impossible in the current environment, stop with:
   - `.venv/bin/python scripts/stage.py implementation-blocked --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --summary "<concise blocker summary>" --blocker "<specific blocker>"`
+  - this command writes the blocker handoff and performs the guarded `In Progress -> Backlog` move through `scripts/linear_state.py`
 - use `Todo` only for code/test/doc defects that another implementation pass can fix immediately.
 
 Hard boundaries:

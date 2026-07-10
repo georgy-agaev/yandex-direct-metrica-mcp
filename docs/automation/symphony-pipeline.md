@@ -24,6 +24,11 @@ Both lanes watch the normal Linear state loop:
 - `In Review`
 - `Done`
 
+State transitions must not be performed ad hoc from lane prose. The active workflows now route state changes through repo-local guarded helpers:
+
+- `scripts/linear_state.py` for explicit lane-owned state moves
+- `scripts/stage.py` for stage exit commands that both write handoff artifacts and invoke the guarded state mover
+
 ## Issue Types
 
 Every Symphony-managed issue should carry one of these labels:
@@ -85,6 +90,7 @@ Path:
 Behavior:
 
 - implementation lane performs the code change, tests, docs, and handoff;
+- implementation moves `Todo -> In Progress` through `scripts/linear_state.py`, and stage exits flow through `scripts/stage.py` plus the same guarded state mover;
 - review lane verifies the work;
 - when review passes, the review lane moves the feature issue to `Done` and auto-creates a PR follow-up issue in `Todo`.
 
@@ -97,6 +103,7 @@ Path:
 Behavior:
 
 - implementation lane re-runs non-live gates, commits, pushes, and creates or updates the GitHub PR;
+- implementation still reaches `In Progress` and `In Review` only through the guarded state path;
 - if the PR issue carries `release-required`, the PR stage is not complete until the PR is publishable and merged;
 - PR and release follow-up issues should start with a deterministic preflight command that validates source metadata before broader agent work;
 - review lane verifies the PR stage artifacts;
@@ -113,6 +120,8 @@ Path:
 Behavior:
 
 - implementation lane performs the release stage: full gates, live validation, tags, GitHub Release, Docker publish verification, local Docker alias refresh;
+- release-stage state moves still flow through the same guarded state path;
+- release preflight must fail closed unless the environment already provides `GHCR_READ_TOKEN` with `read:packages` for the private PRO image pull;
 - review lane verifies the release artifacts and closes the issue.
 
 ## Why this model

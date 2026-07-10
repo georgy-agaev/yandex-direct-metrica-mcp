@@ -62,22 +62,28 @@ If you find code/test/doc defects:
 - rerun the relevant validation;
 - finish review with:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome needs_changes --summary "<concise findings summary>" --validation "<command rerun>"`
+  - this command writes review handoff and performs the guarded `In Review -> Todo` move through `scripts/linear_state.py`
 
 If you hit an external blocker or exhausted retry budget:
 - finish review with:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome blocked --summary "<concise blocker summary>" --blocker "<specific blocker>" --validation "<command rerun>"`
+  - this command writes review handoff and performs the guarded `In Review -> Backlog` move through `scripts/linear_state.py`
 
 If the stage is approved:
 - feature issue:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>" --artifact SYMPHONY_STAGE_HANDOFF.md --artifact SYMPHONY_STAGE_PATCH.diff`
+  - this command writes review handoff and performs the guarded `In Review -> Done` move through `scripts/linear_state.py`
   - `python scripts/linear_issue.py followup-pr --issue-id {{ issue.identifier }} --create-missing-labels`
 - PR issue without `release-required`:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>" --artifact SYMPHONY_STAGE_HANDOFF.md`
+  - this command writes review handoff and performs the guarded `In Review -> Done` move through `scripts/linear_state.py`
 - PR issue with `release-required`:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>" --artifact SYMPHONY_STAGE_HANDOFF.md --release-required`
+  - this command writes review handoff and performs the guarded `In Review -> Done` move through `scripts/linear_state.py`
   - `python scripts/linear_issue.py followup-release --issue-id {{ issue.identifier }} --create-missing-labels`
 - release issue:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>"`
+  - this command writes review handoff and performs the guarded `In Review -> Done` move through `scripts/linear_state.py`
 
 Hard boundaries:
 - keep review scoped to the current stage;

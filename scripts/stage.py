@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import stage_handoff
+from scripts import linear_state, stage_handoff
 
 
 DEFAULT_MAX_ITERATIONS = 3
@@ -21,7 +21,14 @@ DEFAULT_HANDOFF = Path("SYMPHONY_HANDOFF.json")
 
 
 def parse_labels(raw: str) -> list[str]:
-    return [label.strip() for label in raw.split(",") if label.strip()]
+    labels = [label.strip() for label in raw.split(",") if label.strip()]
+    normalized = raw.lower()
+    known = {item.lower() for item in labels}
+    for issue_type in ("release", "pr", "feature"):
+        label = f"issue-type:{issue_type}"
+        if label in normalized and label not in known:
+            labels.append(label)
+    return labels
 
 
 def detect_stage(labels: list[str]) -> str:
@@ -262,6 +269,14 @@ def implementation_ready(args: argparse.Namespace) -> dict[str, Any]:
     }
     write_handoff(workspace / DEFAULT_HANDOFF, handoff)
     verify_stage_exit(stage, workspace, repo)
+    move = linear_state.move_issue(
+        args.issue_id,
+        to_state="In Review",
+        by="implementation",
+        expect=args.from_state,
+    )
+    if not move["ok"]:
+        raise SystemExit(json.dumps(move, ensure_ascii=False))
     return {"ok": True, "stage": stage, "to_state": "In Review", "status": "needs_review"}
 
 
@@ -296,6 +311,14 @@ def implementation_blocked(args: argparse.Namespace) -> dict[str, Any]:
         "blockers": blockers,
     }
     write_handoff(workspace / DEFAULT_HANDOFF, handoff)
+    move = linear_state.move_issue(
+        args.issue_id,
+        to_state="Backlog",
+        by="implementation",
+        expect=args.from_state,
+    )
+    if not move["ok"]:
+        raise SystemExit(json.dumps(move, ensure_ascii=False))
     return {"ok": True, "stage": stage, "to_state": "Backlog", "status": "blocked"}
 
 
@@ -354,6 +377,14 @@ def review_finish(args: argparse.Namespace) -> dict[str, Any]:
     }
     write_handoff(workspace / DEFAULT_HANDOFF, handoff)
     stage_handoff.verify_review(workspace, stage, args.outcome)
+    move = linear_state.move_issue(
+        args.issue_id,
+        to_state=to_state,
+        by="review",
+        expect=args.from_state,
+    )
+    if not move["ok"]:
+        raise SystemExit(json.dumps(move, ensure_ascii=False))
     return {"ok": True, "stage": stage, "to_state": to_state, "status": args.outcome}
 
 
