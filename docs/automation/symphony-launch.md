@@ -24,6 +24,13 @@ For Yandex live validation, export them into the parent Symphony process directl
 
 This keeps the credentials in one place while still making them available to the isolated Codex worker via inherited process environment.
 
+Release follow-up also requires:
+
+- `GHCR_READ_TOKEN` in `<state-root>/yandex.ad/.env`
+
+It must have `read:packages` for the private `ghcr.io/georgy-agaev/yandex-direct-metrica-mcp-pro` package.
+Without it, release preflight now fails immediately instead of wasting a full release pass on a late `docker pull` blocker.
+
 If a live-validation command still reports missing Search API credentials, the implementation/review lane may source `<state-root>/yandex.ad/.env` directly in that command. Do not print values and do not copy the file into the repo or workspace.
 
 ## Required Runtime Paths

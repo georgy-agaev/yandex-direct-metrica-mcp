@@ -412,6 +412,13 @@ def ensure_github_release(tag: str, release_note: Path) -> str:
 
 
 def ghcr_login(owner: str) -> None:
+    token = os.environ.get("GHCR_READ_TOKEN", "").strip()
+    if token:
+        try:
+            run(["docker", "login", "ghcr.io", "-u", owner, "--password-stdin"], input_text=token + "\n")
+            return
+        except subprocess.CalledProcessError as exc:
+            raise ReleaseStepError("docker login ghcr.io", command_details(exc), True) from exc
     try:
         token = gh_output("auth", "token")
         run(["docker", "login", "ghcr.io", "-u", owner, "--password-stdin"], input_text=token + "\n")

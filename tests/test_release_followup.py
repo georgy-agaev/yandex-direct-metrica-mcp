@@ -105,3 +105,23 @@ def test_failure_route_marks_metadata_drift_as_todo() -> None:
         external=False,
     )
     assert route == ("Todo", "needs_changes", "implementation")
+
+
+def test_ghcr_login_prefers_env_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[tuple[str, ...], str | None]] = []
+
+    def fake_run(args, *, capture_output=False, input_text=None):
+        calls.append((tuple(args), input_text))
+        class Result:
+            stdout = ""
+        return Result()
+
+    monkeypatch.setenv("GHCR_READ_TOKEN", "read-token")
+    monkeypatch.setattr(release_followup, "run", fake_run)
+    monkeypatch.setattr(release_followup, "gh_output", lambda *_args: "gh-token")
+
+    release_followup.ghcr_login("georgy-agaev")
+
+    assert calls == [
+        (("docker", "login", "ghcr.io", "-u", "georgy-agaev", "--password-stdin"), "read-token\n")
+    ]

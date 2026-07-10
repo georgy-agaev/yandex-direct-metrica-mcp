@@ -98,6 +98,7 @@ def test_preflight_release_requires_live_merged_pr(monkeypatch, tmp_path: Path) 
         ),
     )
 
+    monkeypatch.setenv("GHCR_READ_TOKEN", "token")
     monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
     monkeypatch.setattr(
         followup_preflight,
@@ -115,6 +116,39 @@ def test_preflight_release_requires_live_merged_pr(monkeypatch, tmp_path: Path) 
     assert payload["source_issue"] == "GEO-15"
     assert payload["pr_url"] == "https://github.com/example/repo/pull/7"
     assert payload["github_pr_state"] == "MERGED"
+    assert payload["ghcr_auth"] == "env:GHCR_READ_TOKEN"
+
+
+def test_preflight_release_requires_ghcr_read_token(monkeypatch, tmp_path: Path) -> None:
+    source_workspace = tmp_path / "GEO-15"
+    source_workspace.mkdir()
+    (source_workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+        "\n".join(
+            [
+                "branch: issue/geo-15",
+                "commit: abc123",
+                "PR URL: https://github.com/example/repo/pull/7",
+                "merge status: merged",
+                "merge commit: def456",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    issue = _issue(
+        "GEO-16",
+        ["symphony", "issue-type:release", "release-required"],
+        linear_issue.followup_description(
+            "release",
+            _issue("GEO-15", ["symphony", "issue-type:pr", "release-required"], "Body"),
+            source_workspace,
+        ),
+    )
+
+    monkeypatch.delenv("GHCR_READ_TOKEN", raising=False)
+    monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
+
+    with pytest.raises(SystemExit, match="GHCR_READ_TOKEN"):
+        followup_preflight.preflight(issue, "release")
 
 
 def test_main_returns_blocked_json_for_unmerged_release(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -143,6 +177,7 @@ def test_main_returns_blocked_json_for_unmerged_release(monkeypatch, capsys, tmp
     )
 
     monkeypatch.setenv("LINEAR_API_KEY", "token")
+    monkeypatch.setenv("GHCR_READ_TOKEN", "token")
     monkeypatch.setattr(followup_preflight, "load_issue", lambda _api_key, _issue_id: issue)
     monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
     monkeypatch.setattr(

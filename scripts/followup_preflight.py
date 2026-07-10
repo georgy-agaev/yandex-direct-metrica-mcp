@@ -83,6 +83,16 @@ def require_metadata(description: str) -> dict[str, str]:
     return metadata
 
 
+def require_release_environment() -> dict[str, str]:
+    token = os.environ.get("GHCR_READ_TOKEN", "").strip()
+    if not token:
+        raise SystemExit(
+            "Release preflight requires GHCR_READ_TOKEN for private PRO image sync. "
+            "Set it in the external yandex.ad state env before starting the release stage."
+        )
+    return {"ghcr_auth": "env:GHCR_READ_TOKEN"}
+
+
 def preflight(issue: dict[str, Any], stage: str) -> dict[str, Any]:
     metadata = require_metadata(issue.get("description") or "")
     source_issue_identifier = metadata["source_issue"]
@@ -102,6 +112,7 @@ def preflight(issue: dict[str, Any], stage: str) -> dict[str, Any]:
     }
 
     if stage == "release":
+        result.update(require_release_environment())
         handoff = stage_handoff_metadata(resolved_source_workspace / "SYMPHONY_STAGE_HANDOFF.md")
         pr_url = handoff.get("pr url")
         if not pr_url:
