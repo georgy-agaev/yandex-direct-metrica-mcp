@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import linear_state, stage_handoff
+from scripts import linear_issue, linear_state, stage_handoff
 
 
 DEFAULT_MAX_ITERATIONS = 3
@@ -217,8 +218,6 @@ def run_preflight(stage: str, issue_id: str) -> dict[str, Any]:
         return {"ok": True, "stage": stage, "issue": issue_id, "preflight": "not_required"}
     from scripts import followup_preflight
 
-    import os
-
     api_key = os.environ.get("LINEAR_API_KEY")
     if not api_key:
         raise SystemExit("LINEAR_API_KEY is required")
@@ -334,6 +333,64 @@ def default_review_next_actor(stage: str, outcome: str, *, release_required: boo
     return "operator"
 
 
+def create_followup_for_review(
+    *,
+    issue_id: str,
+    stage: str,
+    release_required: bool = False,
+) -> dict[str, str] | None:
+    if stage == "feature":
+        followup_stage = "pr"
+    elif stage == "pr" and release_required:
+        followup_stage = "release"
+    else:
+        return None
+
+    api_key = os.environ.get("LINEAR_API_KEY")
+    if not api_key:
+        raise SystemExit("LINEAR_API_KEY is required")
+
+    source_issue = linear_issue.get_issue(api_key, issue_id)
+    input_payload = linear_issue.build_followup_input(
+        api_key,
+        source_issue,
+        followup_stage,
+        "Todo",
+        None,
+        [],
+        True,
+    )
+    existing = linear_issue.find_generated_followup_issue(
+        api_key,
+        input_payload["projectId"],
+        followup_stage,
+        source_issue["identifier"],
+    ) or linear_issue.find_project_issue_by_title(
+        api_key,
+        input_payload["projectId"],
+        input_payload["title"],
+    )
+    if existing:
+        followup_issue = linear_issue.update_issue(
+            api_key,
+            existing["id"],
+            {
+                "title": input_payload["title"],
+                "description": input_payload["description"],
+                "stateId": input_payload["stateId"],
+                "labelIds": input_payload["labelIds"],
+            },
+        )
+    else:
+        followup_issue = linear_issue.create_issue(api_key, input_payload)
+    linear_issue.comment_issue(api_key, source_issue["id"], linear_issue.comment_for_followup(followup_stage, source_issue, followup_issue))
+    return {
+        "stage": followup_stage,
+        "identifier": followup_issue["identifier"],
+        "url": followup_issue["url"],
+    }
+
+
 def review_finish(args: argparse.Namespace) -> dict[str, Any]:
     stage = resolve_stage(args)
     workspace = args.workspace.resolve()
@@ -377,6 +434,13 @@ def review_finish(args: argparse.Namespace) -> dict[str, Any]:
     }
     write_handoff(workspace / DEFAULT_HANDOFF, handoff)
     stage_handoff.verify_review(workspace, stage, args.outcome)
+    followup_issue = None
+    if args.outcome == "approved":
+        followup_issue = create_followup_for_review(
+            issue_id=args.issue_id,
+            stage=stage,
+            release_required=args.release_required,
+        )
     move = linear_state.move_issue(
         args.issue_id,
         to_state=to_state,
@@ -385,7 +449,10 @@ def review_finish(args: argparse.Namespace) -> dict[str, Any]:
     )
     if not move["ok"]:
         raise SystemExit(json.dumps(move, ensure_ascii=False))
-    return {"ok": True, "stage": stage, "to_state": to_state, "status": args.outcome}
+    payload = {"ok": True, "stage": stage, "to_state": to_state, "status": args.outcome}
+    if followup_issue:
+        payload["followup_issue"] = followup_issue
+    return payload
 
 
 def main() -> int:
