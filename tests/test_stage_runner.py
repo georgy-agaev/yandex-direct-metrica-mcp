@@ -246,6 +246,52 @@ def test_implementation_ready_writes_machine_readable_outcome_and_verifies_featu
     assert calls == [("GEO-18", "In Review", "implementation", "In Progress")]
 
 
+def test_implementation_ready_fails_closed_when_linear_move_rejects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = reject_linear_move(monkeypatch)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    init_repo(repo)
+
+    updated = repo / "README.md"
+    updated.write_text("base\nfeature\n", encoding="utf-8")
+    patch = subprocess.run(
+        ["git", "diff", "--binary", "--", "README.md"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    updated.write_text("base\n", encoding="utf-8")
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_STAGE_PATCH.diff").write_text(patch, encoding="utf-8")
+    (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+        "# Handoff\n\nApply with `git apply SYMPHONY_STAGE_PATCH.diff`\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="state_mismatch"):
+        stage.implementation_ready(
+            Namespace(
+                stage="feature",
+                issue_id="GEO-18",
+                title="Automation",
+                summary="Prepared feature handoff",
+                workspace=workspace,
+                repo=repo,
+                from_state="In Progress",
+                validation=["pytest -q tests/test_stage_runner.py"],
+                artifact=["SYMPHONY_STAGE_HANDOFF.md", "SYMPHONY_STAGE_PATCH.diff"],
+                details_file=None,
+            )
+        )
+
+    assert calls == [("GEO-18", "In Review", "implementation", "In Progress")]
+
+
 def test_review_finish_increments_retry_and_emits_machine_outcome(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -292,6 +338,54 @@ def test_review_finish_increments_retry_and_emits_machine_outcome(
     assert payload == {"ok": True, "stage": "feature", "to_state": "Todo", "status": "needs_changes"}
     handoff = json.loads((workspace / "SYMPHONY_HANDOFF.json").read_text(encoding="utf-8"))
     assert handoff["cycle"] == {"iteration": 2, "max_iterations": 3}
+    assert calls == [("GEO-18", "Todo", "review", "In Review")]
+
+
+def test_review_finish_fails_closed_when_linear_move_rejects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = reject_linear_move(monkeypatch)
+    monkeypatch.setattr(stage, "create_followup_for_review", lambda **_: None)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+        "# Handoff\n\nApply with `git apply SYMPHONY_STAGE_PATCH.diff`\n",
+        encoding="utf-8",
+    )
+    (workspace / "SYMPHONY_STAGE_PATCH.diff").write_text("", encoding="utf-8")
+    (workspace / "SYMPHONY_WORK_RESULT.md").write_text("# Result\n", encoding="utf-8")
+    write_handoff(
+        workspace,
+        {
+            **feature_impl_handoff(iteration=1, max_iterations=3),
+            "artifacts": [
+                "SYMPHONY_WORK_RESULT.md",
+                "SYMPHONY_HANDOFF.json",
+                "SYMPHONY_STAGE_HANDOFF.md",
+                "SYMPHONY_STAGE_PATCH.diff",
+            ],
+        },
+    )
+
+    with pytest.raises(SystemExit, match="state_mismatch"):
+        stage.review_finish(
+            Namespace(
+                stage="feature",
+                issue_id="GEO-18",
+                title="Automation",
+                outcome="needs_changes",
+                summary="Need one fix",
+                workspace=workspace,
+                validation=["pytest -q tests/test_stage_runner.py"],
+                artifact=["SYMPHONY_STAGE_HANDOFF.md", "SYMPHONY_STAGE_PATCH.diff"],
+                blocker=[],
+                details_file=None,
+                next_actor="implementation",
+                release_required=False,
+                from_state="In Review",
+            )
+        )
+
     assert calls == [("GEO-18", "Todo", "review", "In Review")]
 
 
