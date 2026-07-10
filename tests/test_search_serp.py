@@ -191,9 +191,19 @@ def test_normalize_search_html_classifies_ad_types_and_blocks() -> None:
 
 def test_search_serp_server_helper_omits_raw_by_default(monkeypatch) -> None:
     raw_html = """
+    <li class="serp-item serp-adv" data-cid="ad-1">
+      <span>Реклама</span>
+      <a href="https://top.example.ru"><h2>Top Ad</h2></a>
+      <span>top.example.ru</span>
+    </li>
     <li class="serp-item" data-cid="org-1">
       <a href="https://example.ru"><h2>Title</h2></a>
       <div>Snippet</div>
+    </li>
+    <li class="serp-item serp-adv" data-cid="ad-2">
+      <span>Реклама</span>
+      <a href="https://bottom.example.ru"><h2>Bottom Ad</h2></a>
+      <span>bottom.example.ru</span>
     </li>
     """
     encoded = base64.b64encode(raw_html.encode("utf-8")).decode("ascii")
@@ -228,6 +238,8 @@ def test_search_serp_server_helper_omits_raw_by_default(monkeypatch) -> None:
     assert out["query"] == "x"
     assert out["region"] == 213
     assert out["device"] == "DEVICE_DESKTOP"
+    assert out["ads_count_top"] == 1
+    assert out["ads_count_bottom"] == 1
     assert out["organic"][0]["domain"] == "example.ru"
     assert "raw_html" not in out
     assert captured["payload"]["responseFormat"] == "FORMAT_HTML"

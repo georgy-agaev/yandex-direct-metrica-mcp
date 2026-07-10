@@ -6190,6 +6190,7 @@ def _search_serp(ctx: AppContext, args: dict[str, Any]) -> dict[str, Any]:
         **meta,
         "ads": normalized.get("ads") or [],
         "ads_count_top": int(normalized.get("ads_count_top") or 0),
+        "ads_count_bottom": int(normalized.get("ads_count_bottom") or 0),
         "organic": normalized.get("organic") or [],
         "captcha": bool(normalized.get("captcha")),
     }
