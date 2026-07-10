@@ -52,6 +52,12 @@ def test_resolve_stage_uses_labels_when_stage_missing() -> None:
     assert stage.resolve_stage(Namespace(stage=None, labels="symphony,issue-type:pr")) == "pr"
 
 
+def test_resolve_stage_extracts_issue_type_from_compact_label_text() -> None:
+    assert stage.resolve_stage(Namespace(stage=None, labels="symphonyissue-type:featureautomation")) == "feature"
+    assert stage.resolve_stage(Namespace(stage=None, labels="symphonyissue-type:prautomation")) == "pr"
+    assert stage.resolve_stage(Namespace(stage=None, labels="symphonyissue-type:releaseautomation")) == "release"
+
+
 def test_resolve_stage_prefers_explicit_stage_over_labels() -> None:
     assert stage.resolve_stage(Namespace(stage="release", labels="symphony,issue-type:pr")) == "release"
 

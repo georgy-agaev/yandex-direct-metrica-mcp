@@ -21,7 +21,13 @@ DEFAULT_HANDOFF = Path("SYMPHONY_HANDOFF.json")
 
 
 def parse_labels(raw: str) -> list[str]:
-    return [label.strip() for label in raw.split(",") if label.strip()]
+    labels = [label.strip() for label in raw.split(",") if label.strip()]
+    normalized = raw.lower()
+    for issue_type in ("release", "pr", "feature"):
+        label = f"issue-type:{issue_type}"
+        if label in normalized and label not in {item.lower() for item in labels}:
+            labels.append(label)
+    return labels
 
 
 def detect_stage(labels: list[str]) -> str:
