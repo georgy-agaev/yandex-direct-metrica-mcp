@@ -72,6 +72,13 @@ def resolve_stage(args: argparse.Namespace) -> str:
     return getattr(args, "stage", None) or detect_stage(parse_labels(getattr(args, "labels", "")))
 
 
+def has_release_required(args: argparse.Namespace) -> bool:
+    if getattr(args, "release_required", False):
+        return True
+    labels = {label.strip().lower() for label in parse_labels(getattr(args, "labels", ""))}
+    return "release-required" in labels
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -393,6 +400,7 @@ def create_followup_for_review(
 
 def review_finish(args: argparse.Namespace) -> dict[str, Any]:
     stage = resolve_stage(args)
+    release_required = has_release_required(args)
     workspace = args.workspace.resolve()
     cycle = current_cycle(workspace)
     ensure_cycle_valid(cycle)
@@ -406,7 +414,7 @@ def review_finish(args: argparse.Namespace) -> dict[str, Any]:
     next_actor = args.next_actor or default_review_next_actor(
         stage,
         args.outcome,
-        release_required=args.release_required,
+        release_required=release_required,
     )
     artifacts = base_artifacts(args.artifact)
     work_result = render_work_result(
@@ -439,7 +447,7 @@ def review_finish(args: argparse.Namespace) -> dict[str, Any]:
         followup_issue = create_followup_for_review(
             issue_id=args.issue_id,
             stage=stage,
-            release_required=args.release_required,
+            release_required=release_required,
         )
     move = linear_state.move_issue(
         args.issue_id,

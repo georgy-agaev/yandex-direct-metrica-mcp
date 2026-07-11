@@ -73,12 +73,10 @@ If the stage is approved:
 - feature issue:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>" --artifact SYMPHONY_STAGE_HANDOFF.md --artifact SYMPHONY_STAGE_PATCH.diff`
   - this command writes review handoff, creates the PR follow-up issue through repo-local runner logic, and then performs the guarded `In Review -> Done` move through `scripts/linear_state.py`
-- PR issue without `release-required`:
+- PR issue:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>" --artifact SYMPHONY_STAGE_HANDOFF.md`
   - this command writes review handoff and performs the guarded `In Review -> Done` move through `scripts/linear_state.py`
-- PR issue with `release-required`:
-  - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>" --artifact SYMPHONY_STAGE_HANDOFF.md --release-required`
-  - this command writes review handoff, creates the release follow-up issue through repo-local runner logic, and then performs the guarded `In Review -> Done` move through `scripts/linear_state.py`
+  - if the issue labels include `release-required`, the repo-local runner infers that automatically and creates the release follow-up issue before closing the PR issue
 - release issue:
   - `.venv/bin/python scripts/stage.py review-finish --labels "{{ issue.labels }}" --issue-id {{ issue.identifier }} --title "{{ issue.title }}" --outcome approved --summary "<concise approval summary>" --validation "<command rerun>"`
   - this command writes review handoff and performs the guarded `In Review -> Done` move through `scripts/linear_state.py`

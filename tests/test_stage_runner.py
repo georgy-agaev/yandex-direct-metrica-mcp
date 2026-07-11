@@ -490,6 +490,60 @@ def test_review_finish_routes_release_required_pr_to_followup_release(
     assert calls == [("GEO-18", "Done", "review", "In Review")]
 
 
+def test_review_finish_infers_release_required_from_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = allow_linear_move(monkeypatch)
+    followup_calls = allow_followup_creation(monkeypatch)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+        "branch: issue/geo-18\ncommit: abc123\nPR URL: https://example.test/pr/1\n",
+        encoding="utf-8",
+    )
+    (workspace / "SYMPHONY_WORK_RESULT.md").write_text("# Result\n", encoding="utf-8")
+    write_handoff(
+        workspace,
+        {
+            "schema_version": 1,
+            "issue": {"identifier": "GEO-18", "title": "Automation"},
+            "stage": {"type": "pr", "role": "implementation"},
+            "transition": {"from_state": "In Progress", "to_state": "In Review", "status": "needs_review"},
+            "cycle": {"iteration": 1, "max_iterations": 3},
+            "summary": "summary",
+            "artifacts": ["SYMPHONY_WORK_RESULT.md", "SYMPHONY_HANDOFF.json", "SYMPHONY_STAGE_HANDOFF.md"],
+            "validation": {"passed": ["pytest -q tests/test_stage_runner.py"]},
+            "next_actor": "review",
+            "blockers": [],
+        },
+    )
+
+    payload = stage.review_finish(
+        Namespace(
+            stage="pr",
+            labels="symphony,issue-type:pr,release-required",
+            issue_id="GEO-18",
+            title="Automation",
+            outcome="approved",
+            summary="Approved",
+            workspace=workspace,
+            validation=["pytest -q tests/test_stage_runner.py"],
+            artifact=["SYMPHONY_STAGE_HANDOFF.md"],
+            blocker=[],
+            details_file=None,
+            next_actor=None,
+            release_required=False,
+            from_state="In Review",
+        )
+    )
+
+    assert payload["followup_issue"]["stage"] == "release"
+    handoff = json.loads((workspace / "SYMPHONY_HANDOFF.json").read_text(encoding="utf-8"))
+    assert handoff["next_actor"] == "followup-release"
+    assert followup_calls == [("GEO-18", "pr", True)]
+    assert calls == [("GEO-18", "Done", "review", "In Review")]
+
+
 def test_review_finish_rejects_needs_changes_at_max_iterations(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
