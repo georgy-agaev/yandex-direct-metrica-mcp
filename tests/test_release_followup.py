@@ -66,6 +66,27 @@ def test_write_release_notes_renders_summary_and_validation(tmp_path: Path, monk
     assert "- `pytest -q`" in text
 
 
+def test_write_release_notes_keeps_existing_file_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    releases_dir = tmp_path / "docs" / "releases"
+    path = releases_dir / "v2.0.14.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("# v2.0.14\n\nExisting release notes.\n", encoding="utf-8")
+    monkeypatch.setattr(release_followup, "RELEASES_DIR", releases_dir)
+
+    returned = release_followup.write_release_notes(
+        "2.0.14",
+        "2026-07-09",
+        "- New generated item.",
+        issue_identifier="GEO-17",
+        source_issue="GEO-15",
+        pr_url="https://github.com/example/repo/pull/7",
+        validations=["pytest -q"],
+    )
+
+    assert returned == path
+    assert path.read_text(encoding="utf-8") == "# v2.0.14\n\nExisting release notes.\n"
+
+
 def test_ensure_repo_ready_for_release_allows_only_release_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(release_followup, "remove_stale_artifacts", lambda: None)
     monkeypatch.setattr(
