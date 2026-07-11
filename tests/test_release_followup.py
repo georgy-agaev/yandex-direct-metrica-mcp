@@ -133,8 +133,10 @@ def test_ghcr_login_prefers_env_token(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_run(args, *, capture_output=False, input_text=None):
         calls.append((tuple(args), input_text))
+
         class Result:
             stdout = ""
+
         return Result()
 
     monkeypatch.setenv("GHCR_READ_TOKEN", "read-token")
@@ -145,4 +147,26 @@ def test_ghcr_login_prefers_env_token(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert calls == [
         (("docker", "login", "ghcr.io", "-u", "georgy-agaev", "--password-stdin"), "read-token\n")
+    ]
+
+
+def test_ghcr_login_falls_back_to_gh_auth_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[tuple[str, ...], str | None]] = []
+
+    def fake_run(args, *, capture_output=False, input_text=None):
+        calls.append((tuple(args), input_text))
+
+        class Result:
+            stdout = ""
+
+        return Result()
+
+    monkeypatch.delenv("GHCR_READ_TOKEN", raising=False)
+    monkeypatch.setattr(release_followup, "run", fake_run)
+    monkeypatch.setattr(release_followup, "gh_output", lambda *args: "gh-cli-token")
+
+    release_followup.ghcr_login("georgy-agaev")
+
+    assert calls == [
+        (("docker", "login", "ghcr.io", "-u", "georgy-agaev", "--password-stdin"), "gh-cli-token\n")
     ]
