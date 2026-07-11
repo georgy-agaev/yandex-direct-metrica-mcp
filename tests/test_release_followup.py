@@ -98,6 +98,26 @@ def test_ensure_repo_ready_for_release_allows_only_release_metadata(monkeypatch:
     release_followup.ensure_repo_ready_for_release()
 
 
+def test_ensure_repo_ready_for_release_removes_stale_artifacts_before_dirty_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_remove_stale_artifacts() -> None:
+        calls.append("remove")
+
+    def fake_dirty_paths() -> list[str]:
+        assert calls == ["remove"]
+        return ["CHANGELOG.md"]
+
+    monkeypatch.setattr(release_followup, "remove_stale_artifacts", fake_remove_stale_artifacts)
+    monkeypatch.setattr(release_followup, "dirty_paths", fake_dirty_paths)
+
+    release_followup.ensure_repo_ready_for_release()
+
+    assert calls == ["remove"]
+
+
 def test_ensure_repo_ready_for_release_rejects_unexpected_paths(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(release_followup, "remove_stale_artifacts", lambda: None)
     monkeypatch.setattr(
