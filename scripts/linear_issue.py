@@ -766,6 +766,54 @@ def build_followup_input(
     }
 
 
+def ensure_followup_issue(
+    api_key: str,
+    source_issue: dict[str, Any],
+    stage: str,
+    *,
+    state: str = "Todo",
+    explicit_title: str | None = None,
+    extra_labels: list[str] | None = None,
+    create_missing_labels: bool = True,
+) -> dict[str, Any]:
+    if stage == "release" and RELEASE_REQUIRED_LABEL not in {
+        label.strip().lower() for label in issue_label_names(source_issue)
+    }:
+        raise SystemExit(
+            f"Source issue {source_issue['identifier']} is not marked `{RELEASE_REQUIRED_LABEL}`"
+        )
+    input_payload = build_followup_input(
+        api_key,
+        source_issue,
+        stage,
+        state,
+        explicit_title,
+        extra_labels or [],
+        create_missing_labels,
+    )
+    existing = find_generated_followup_issue(
+        api_key,
+        input_payload["projectId"],
+        stage,
+        source_issue["identifier"],
+    ) or find_project_issue_by_title(api_key, input_payload["projectId"], input_payload["title"])
+    if existing:
+        issue = update_issue(
+            api_key,
+            existing["id"],
+            {
+                "title": input_payload["title"],
+                "description": input_payload["description"],
+                "stateId": input_payload["stateId"],
+                "labelIds": input_payload["labelIds"],
+            },
+        )
+    else:
+        issue = create_issue(api_key, input_payload)
+    comment_issue(api_key, source_issue["id"], comment_for_followup(stage, source_issue, issue))
+    return issue
+
+
 def comment_for_followup(stage: str, source_issue: dict[str, Any], created_issue: dict[str, Any]) -> str:
     stage_name = "PR publication" if stage == "pr" else "release publication"
     return (
@@ -890,42 +938,15 @@ def main() -> int:
     if args.command in {"followup-pr", "followup-release"}:
         stage = "pr" if args.command == "followup-pr" else "release"
         source_issue = get_issue(api_key or "", args.issue_id or "")
-        if stage == "release" and RELEASE_REQUIRED_LABEL not in {
-            label.strip().lower() for label in issue_label_names(source_issue)
-        }:
-            raise SystemExit(
-                f"Source issue {source_issue['identifier']} is not marked `{RELEASE_REQUIRED_LABEL}`"
-            )
-        followup_state = args.state or "Todo"
-        input_payload = build_followup_input(
+        issue = ensure_followup_issue(
             api_key or "",
             source_issue,
             stage,
-            followup_state,
-            args.title,
-            parse_csv(args.labels),
-            args.create_missing_labels,
+            state=args.state or "Todo",
+            explicit_title=args.title,
+            extra_labels=parse_csv(args.labels),
+            create_missing_labels=args.create_missing_labels,
         )
-        existing = find_generated_followup_issue(
-            api_key or "",
-            input_payload["projectId"],
-            stage,
-            source_issue["identifier"],
-        ) or find_project_issue_by_title(api_key or "", input_payload["projectId"], input_payload["title"])
-        if existing:
-            issue = update_issue(
-                api_key or "",
-                existing["id"],
-                {
-                    "title": input_payload["title"],
-                    "description": input_payload["description"],
-                    "stateId": input_payload["stateId"],
-                    "labelIds": input_payload["labelIds"],
-                },
-            )
-        else:
-            issue = create_issue(api_key or "", input_payload)
-        comment_issue(api_key or "", source_issue["id"], comment_for_followup(stage, source_issue, issue))
         print(f"{issue['identifier']} {issue['url']}")
         return 0
 

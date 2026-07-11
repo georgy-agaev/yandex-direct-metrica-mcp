@@ -358,39 +358,15 @@ def create_followup_for_review(
         raise SystemExit("LINEAR_API_KEY is required")
 
     source_issue = linear_issue.get_issue(api_key, issue_id)
-    input_payload = linear_issue.build_followup_input(
+    followup_issue = linear_issue.ensure_followup_issue(
         api_key,
         source_issue,
         followup_stage,
-        "Todo",
-        None,
-        [],
-        True,
+        state="Todo",
+        explicit_title=None,
+        extra_labels=[],
+        create_missing_labels=True,
     )
-    existing = linear_issue.find_generated_followup_issue(
-        api_key,
-        input_payload["projectId"],
-        followup_stage,
-        source_issue["identifier"],
-    ) or linear_issue.find_project_issue_by_title(
-        api_key,
-        input_payload["projectId"],
-        input_payload["title"],
-    )
-    if existing:
-        followup_issue = linear_issue.update_issue(
-            api_key,
-            existing["id"],
-            {
-                "title": input_payload["title"],
-                "description": input_payload["description"],
-                "stateId": input_payload["stateId"],
-                "labelIds": input_payload["labelIds"],
-            },
-        )
-    else:
-        followup_issue = linear_issue.create_issue(api_key, input_payload)
-    linear_issue.comment_issue(api_key, source_issue["id"], linear_issue.comment_for_followup(followup_stage, source_issue, followup_issue))
     return {
         "stage": followup_stage,
         "identifier": followup_issue["identifier"],
