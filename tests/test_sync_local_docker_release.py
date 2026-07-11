@@ -57,6 +57,16 @@ def test_ghcr_login_if_possible_uses_env_token(monkeypatch: pytest.MonkeyPatch) 
     ]
 
 
+def test_ghcr_login_if_possible_skips_missing_env_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_run(*_args, **_kwargs):
+        raise AssertionError("docker login should not run without GHCR_READ_TOKEN")
+
+    monkeypatch.delenv("GHCR_READ_TOKEN", raising=False)
+    monkeypatch.setattr(sync_local_docker_release.subprocess, "run", fail_run)
+
+    assert sync_local_docker_release.ghcr_login_if_possible("georgy-agaev") is False
+
+
 def test_ghcr_login_if_possible_raises_actionable_error_for_bad_token(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_run(*_args, **_kwargs):
         raise subprocess.CalledProcessError(
