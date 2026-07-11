@@ -153,10 +153,9 @@ def parse_followup_metadata(description: str) -> dict[str, str]:
     return metadata
 
 
-def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -> Path:
+def review_verify_command(stage: str) -> list[str]:
     if stage == "pr":
-        verifier_name = "review-verify"
-        command = [
+        return [
             sys.executable,
             "scripts/stage_handoff.py",
             "review-verify",
@@ -167,39 +166,49 @@ def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -
             "--outcome",
             "approved",
         ]
-    else:
-        verifier_name = "review-verify"
-        command = [
-            sys.executable,
-            "scripts/stage_handoff.py",
-            "review-verify",
-            "--workspace",
-            "__WORKSPACE__",
-            "--stage",
-            "pr",
-            "--outcome",
-            "approved",
-        ]
+    return [
+        sys.executable,
+        "scripts/stage_handoff.py",
+        "review-verify",
+        "--workspace",
+        "__WORKSPACE__",
+        "--stage",
+        "pr",
+        "--outcome",
+        "approved",
+    ]
+
+
+def validate_followup_source_workspace(stage: str, source_issue: dict[str, Any], workspace: Path) -> Path:
+    verifier_name = "review-verify"
+    command = review_verify_command(stage)
+    candidate_command = command[:]
+    workspace_index = candidate_command.index("--workspace") + 1
+    resolved = workspace.resolve()
+    candidate_command[workspace_index] = str(resolved)
+    repo_root = Path(__file__).resolve().parent.parent
+    try:
+        subprocess.run(candidate_command, cwd=repo_root, check=True, capture_output=True, text=True)
+        if stage == "release":
+            verify_release_source_metadata(resolved)
+        return resolved
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        stdout = (exc.stdout or "").strip()
+        details = stderr or stdout or str(exc)
+        raise SystemExit(f"{resolved}: {details}") from exc
+
+
+def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -> Path:
+    verifier_name = "review-verify"
     candidates = candidate_source_workspaces(source_issue["identifier"])
     if not candidates:
         raise SystemExit(f"Source workspace not found: {source_workspace_path(source_issue['identifier'])}")
 
     failures: list[str] = []
-    repo_root = Path(__file__).resolve().parent.parent
     for resolved in candidates:
-        candidate_command = command[:]
-        workspace_index = candidate_command.index("--workspace") + 1
-        candidate_command[workspace_index] = str(resolved)
         try:
-            subprocess.run(candidate_command, cwd=repo_root, check=True, capture_output=True, text=True)
-            if stage == "release":
-                verify_release_source_metadata(resolved)
-            return resolved
-        except subprocess.CalledProcessError as exc:
-            stderr = (exc.stderr or "").strip()
-            stdout = (exc.stdout or "").strip()
-            details = stderr or stdout or str(exc)
-            failures.append(f"{resolved}: {details}")
+            return validate_followup_source_workspace(stage, source_issue, resolved)
         except SystemExit as exc:
             failures.append(f"{resolved}: {exc}")
 
@@ -748,8 +757,13 @@ def build_followup_input(
     explicit_title: str | None,
     extra_labels: list[str],
     create_missing_labels: bool,
+    source_workspace_override: Path | None = None,
 ) -> dict[str, Any]:
-    source_workspace = verify_followup_source_workspace(stage, source_issue)
+    source_workspace = (
+        validate_followup_source_workspace(stage, source_issue, source_workspace_override)
+        if source_workspace_override is not None
+        else verify_followup_source_workspace(stage, source_issue)
+    )
     team_id = source_issue["team"]["id"]
     project = source_issue.get("project") or {}
     project_id = project.get("id")
@@ -775,6 +789,7 @@ def ensure_followup_issue(
     explicit_title: str | None = None,
     extra_labels: list[str] | None = None,
     create_missing_labels: bool = True,
+    source_workspace_override: Path | None = None,
 ) -> dict[str, Any]:
     if stage == "release" and RELEASE_REQUIRED_LABEL not in {
         label.strip().lower() for label in issue_label_names(source_issue)
@@ -790,6 +805,7 @@ def ensure_followup_issue(
         explicit_title,
         extra_labels or [],
         create_missing_labels,
+        source_workspace_override,
     )
     existing = find_generated_followup_issue(
         api_key,

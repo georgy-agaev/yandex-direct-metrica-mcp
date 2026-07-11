@@ -370,6 +370,40 @@ def test_verify_followup_source_workspace_prefers_valid_archived_candidate(monke
     assert seen == [str(archived.resolve())]
 
 
+def test_build_followup_input_uses_workspace_override(monkeypatch, tmp_path) -> None:
+    workspace = tmp_path / "GEO-12"
+    workspace.mkdir()
+    seen: list[Path] = []
+
+    monkeypatch.setattr(
+        linear_issue,
+        "validate_followup_source_workspace",
+        lambda _stage, _source_issue, candidate: seen.append(candidate.resolve()) or candidate.resolve(),
+    )
+    monkeypatch.setattr(
+        linear_issue,
+        "verify_followup_source_workspace",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("override path should bypass candidate lookup")),
+    )
+    monkeypatch.setattr(linear_issue, "resolve_state_id", lambda *_args, **_kwargs: "state-id")
+    monkeypatch.setattr(linear_issue, "resolve_label_ids", lambda *_args, **_kwargs: ["label-id"])
+
+    payload = linear_issue.build_followup_input(
+        "token",
+        _issue_with_identifier("GEO-12", ["symphony", "issue-type:pr", "release-required"]),
+        "release",
+        "Todo",
+        None,
+        [],
+        True,
+        source_workspace_override=workspace,
+    )
+
+    assert seen == [workspace.resolve()]
+    assert payload["stateId"] == "state-id"
+    assert payload["labelIds"] == ["label-id"]
+
+
 def test_cleanup_generated_followup_issues_deletes_matches(monkeypatch) -> None:
     source_issue = {
         "identifier": "GEO-12",

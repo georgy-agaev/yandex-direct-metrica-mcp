@@ -160,6 +160,7 @@ def reconcile_followup(workspace: Path, issue_identifier: str) -> dict[str, obje
         explicit_title=None,
         extra_labels=[],
         create_missing_labels=True,
+        source_workspace_override=workspace,
     )
     return {
         "status": "created",
