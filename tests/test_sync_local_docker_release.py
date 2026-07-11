@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 
 import pytest
@@ -18,6 +19,43 @@ def test_specs_include_pro() -> None:
     assert len(items) == 2
     assert items[1].remote == "ghcr.io/georgy-agaev/yandex-direct-metrica-mcp-pro:pro-v2.0.13"
     assert "yandex-direct-metrica-mcp-pro:latest" in items[1].local_aliases
+
+
+def test_main_public_only_refreshes_public_aliases_without_ghcr_login(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "parse_args",
+        lambda: argparse.Namespace(version="2.0.13", owner="georgy-agaev", include_pro=False),
+    )
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "ghcr_login_if_possible",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("public sync should not log in")),
+    )
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "pull_remote_image",
+        lambda remote: calls.append(("pull", (remote,))),
+    )
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "run",
+        lambda *args: calls.append(("run", tuple(args))),
+    )
+
+    assert sync_local_docker_release.main() == 0
+
+    remote = "ghcr.io/georgy-agaev/yandex-direct-metrica-mcp:v2.0.13"
+    assert calls == [
+        ("pull", (remote,)),
+        ("run", ("docker", "tag", remote, "yandex-direct-metrica-mcp:latest")),
+        ("run", ("docker", "tag", remote, "ghcr.io/georgy-agaev/yandex-direct-metrica-mcp:latest")),
+        ("run", ("docker", "tag", remote, "docker.io/georgy-agaev/yandex-direct-metrica-mcp:latest")),
+    ]
 
 
 def test_classify_pull_failure_forbidden() -> None:
