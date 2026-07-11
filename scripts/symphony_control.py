@@ -13,6 +13,7 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -21,7 +22,7 @@ from dotenv import dotenv_values
 DEFAULT_SYMPHONY_ROOT = Path("/Users/georgyagaev/Projects/Symphony_yaad")
 DEFAULT_WORKSPACE_ROOT = Path("/private/tmp/symphony_yandexad_workspaces")
 DEFAULT_STATE_ENV = Path("/Users/georgyagaev/mcp/state/yandex.ad/.env")
-DEFAULT_CODEX_HOME = Path.home() / ".codex-symphony"
+DEFAULT_CODEX_HOME = Path.home() / ".codex"
 LANES: dict[str, dict[str, object]] = {
     "implementation": {
         "workflow": "WORKFLOW.yandexad.implementation.md",
@@ -56,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--symphony-root", type=Path, default=DEFAULT_SYMPHONY_ROOT)
     parser.add_argument("--workspace-root", type=Path, default=DEFAULT_WORKSPACE_ROOT)
     parser.add_argument("--state-env", type=Path, default=DEFAULT_STATE_ENV)
-    parser.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
+    parser.add_argument("--codex-home", type=Path)
     parser.add_argument("--keep-deprecated", action="store_true")
     return parser.parse_args()
 
@@ -109,7 +110,22 @@ def stop_pid(path: Path) -> bool:
     return True
 
 
-def build_env(symphony_root: Path, workspace_root: Path, state_env: Path, codex_home: Path) -> dict[str, str]:
+def resolve_codex_home(explicit: Path | None, env: Mapping[str, str] | None = None) -> Path:
+    if explicit is not None:
+        return explicit.expanduser().resolve()
+    source_env = os.environ if env is None else env
+    configured = source_env.get("CODEX_HOME")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return DEFAULT_CODEX_HOME.expanduser().resolve()
+
+
+def build_env(
+    symphony_root: Path,
+    workspace_root: Path,
+    state_env: Path,
+    codex_home: Path | None,
+) -> dict[str, str]:
     env = os.environ.copy()
     root_env = symphony_root / ".env"
     for source in (root_env, state_env):
@@ -119,7 +135,7 @@ def build_env(symphony_root: Path, workspace_root: Path, state_env: Path, codex_
                     env[key] = value
     env["SYMPHONY_ROOT"] = str(symphony_root)
     env["SYMPHONY_WORKSPACE_ROOT"] = str(workspace_root)
-    env["CODEX_HOME"] = str(codex_home.expanduser())
+    env["CODEX_HOME"] = str(resolve_codex_home(codex_home, env))
     return env
 
 
@@ -195,7 +211,7 @@ def main() -> int:
     symphony_root = args.symphony_root.expanduser().resolve()
     workspace_root = args.workspace_root.expanduser().resolve()
     state_env = args.state_env.expanduser().resolve()
-    codex_home = args.codex_home.expanduser().resolve()
+    codex_home = args.codex_home.expanduser().resolve() if args.codex_home else None
     log_root = symphony_root / "logs"
     lanes = lane_names(args.lanes)
 

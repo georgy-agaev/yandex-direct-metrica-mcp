@@ -51,11 +51,10 @@ Use the app-bundled Codex binary for Symphony lanes:
 
 Reason:
 
-- Symphony should use a dedicated Codex config root such as `$HOME/.codex-symphony`;
-- keep the main interactive Codex profile separate from the lower-cost Symphony profile;
-- the dedicated Symphony profile should currently use:
-  - `model = "gpt-5.5"`
-  - `model_reasoning_effort = "medium"`
+- by default Symphony should reuse the authenticated interactive Codex home at `$HOME/.codex`;
+- a dedicated root such as `$HOME/.codex-symphony` is optional, not the default;
+- only use a dedicated Symphony root if it is explicitly authenticated and has usable plan/credit state;
+- if Symphony starts zero-token turns and session jsonl shows `credits.balance = "0"`, the configured `CODEX_HOME` is wrong for autonomous runs;
 - using the app-bundled binary keeps Symphony closer to the same runtime that already exposes `browser@openai-bundled`, `chrome-devtools`, and `playwrigh` in the interactive desktop setup.
 
 ## Implementation lane
@@ -69,7 +68,7 @@ mkdir -p "$SYMPHONY_ROOT"/logs "$SYMPHONY_WORKSPACE_ROOT"
 set -a
 . "$SYMPHONY_ROOT"/.env
 . <state-root>/yandex.ad/.env
-export CODEX_HOME="${CODEX_HOME:-$HOME/.codex-symphony}"
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 set +a
 /opt/homebrew/bin/mise exec -- ./bin/symphony \
   "$SYMPHONY_ROOT"/workflows/WORKFLOW.yandexad.implementation.md \
@@ -89,7 +88,7 @@ mkdir -p "$SYMPHONY_ROOT"/logs "$SYMPHONY_WORKSPACE_ROOT"
 set -a
 . "$SYMPHONY_ROOT"/.env
 . <state-root>/yandex.ad/.env
-export CODEX_HOME="${CODEX_HOME:-$HOME/.codex-symphony}"
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 set +a
 /opt/homebrew/bin/mise exec -- ./bin/symphony \
   "$SYMPHONY_ROOT"/workflows/WORKFLOW.yandexad.review.md \
