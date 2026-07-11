@@ -110,6 +110,26 @@ def test_legal_transition_allowed() -> None:
     assert client.updates == [("GEO-22", "team-1", "Done")]
 
 
+def test_followup_role_can_finalize_only_in_review_source() -> None:
+    client = FakeClient("In Review")
+
+    payload = linear_state.move_issue("GEO-22", to_state="Done", by="followup", client=client)
+
+    assert payload["ok"] is True
+    assert payload["updated_state"] == "Done"
+    assert client.updates == [("GEO-22", "team-1", "Done")]
+
+
+def test_followup_role_rejects_non_review_repair() -> None:
+    client = FakeClient("In Progress")
+
+    payload = linear_state.move_issue("GEO-22", to_state="Done", by="followup", client=client)
+
+    assert payload["ok"] is False
+    assert payload["reason"] == "illegal_transition:followup:In Progress->Done"
+    assert client.updates == []
+
+
 def test_move_via_cli_rejects_terminal_state(tmp_path: Path) -> None:
     fixture = tmp_path / "linear-fixture.json"
     write_fixture(fixture, state="Done")

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from scripts import symphony_control
 
@@ -55,3 +58,65 @@ def test_build_env_explicit_codex_home_overrides_state_env(tmp_path) -> None:
     env = symphony_control.build_env(symphony_root, workspace_root, state_env, explicit)
 
     assert env["CODEX_HOME"] == str(explicit.resolve())
+
+
+def _completed(*, returncode: int = 0, stdout: str = "", stderr: str = ""):
+    class Result:
+        pass
+
+    result = Result()
+    result.returncode = returncode
+    result.stdout = stdout
+    result.stderr = stderr
+    return result
+
+
+def test_verify_codex_runtime_accepts_logged_in_reachable_profile(monkeypatch, tmp_path) -> None:
+    responses = iter(
+        [
+            _completed(stdout="Logged in using ChatGPT\n"),
+            _completed(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "checks": {
+                            "auth.credentials": {"status": "ok"},
+                            "network.provider_reachability": {
+                                "status": "ok",
+                                "summary": "provider reachable",
+                            },
+                        }
+                    }
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(symphony_control, "run_codex_command", lambda *args, **kwargs: next(responses))
+
+    symphony_control.verify_codex_runtime(tmp_path, {"CODEX_HOME": str(tmp_path / ".codex")})
+
+
+def test_verify_codex_runtime_blocks_when_provider_unreachable(monkeypatch, tmp_path) -> None:
+    responses = iter(
+        [
+            _completed(stdout="Logged in using ChatGPT\n"),
+            _completed(
+                returncode=1,
+                stdout=json.dumps(
+                    {
+                        "checks": {
+                            "auth.credentials": {"status": "ok"},
+                            "network.provider_reachability": {
+                                "status": "fail",
+                                "summary": "required provider endpoints are unreachable",
+                            },
+                        }
+                    }
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(symphony_control, "run_codex_command", lambda *args, **kwargs: next(responses))
+
+    with pytest.raises(SystemExit, match="required provider endpoints are unreachable"):
+        symphony_control.verify_codex_runtime(tmp_path, {"CODEX_HOME": str(tmp_path / ".codex")})

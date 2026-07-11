@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts import linear_issue
+from scripts import linear_issue, linear_state
 
 
 PR_URL_RE = re.compile(r"https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)")
@@ -99,12 +99,27 @@ def ensure_source_issue_done(api_key: str, source_issue_identifier: str) -> dict
     if current_state == "Done":
         return {"status": "already_done", "state": current_state}
 
-    done_state_id = linear_issue.resolve_state_id(api_key, source_issue["team"]["id"], "Done")
-    updated = linear_issue.update_issue_state(api_key, source_issue_identifier, done_state_id)
+    if current_state != "In Review":
+        raise SystemExit(
+            f"Source issue {source_issue_identifier} must be `Done` before follow-up preflight; "
+            f"current state is `{current_state}`."
+        )
+
+    move = linear_state.move_issue(
+        source_issue_identifier,
+        to_state="Done",
+        by="followup",
+        expect="In Review",
+        client=linear_state.RepoLinearClient(api_key),
+    )
+    if not move["ok"]:
+        raise SystemExit(
+            f"Source issue {source_issue_identifier} could not be repaired to `Done`: {move['reason']}"
+        )
     return {
         "status": "repaired",
         "from_state": current_state,
-        "state": updated["state"]["name"],
+        "state": move["updated_state"],
     }
 
 

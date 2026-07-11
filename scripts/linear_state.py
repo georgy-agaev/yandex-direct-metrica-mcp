@@ -21,6 +21,7 @@ ALLOWED_TRANSITIONS = {
     ("implementation", "Todo"): {"In Progress"},
     ("implementation", "In Progress"): {"In Review", "Backlog"},
     ("review", "In Review"): {"Done", "Todo", "Backlog"},
+    ("followup", "In Review"): {"Done"},
 }
 
 
@@ -103,7 +104,7 @@ def parse_args() -> argparse.Namespace:
     move = sub.add_parser("move")
     move.add_argument("--issue-id", required=True)
     move.add_argument("--to", dest="to_state", required=True)
-    move.add_argument("--by", choices=("implementation", "review"), required=True)
+    move.add_argument("--by", choices=("implementation", "review", "followup"), required=True)
     move.add_argument("--expect")
     move.add_argument("--fixture", type=Path)
     return parser.parse_args()

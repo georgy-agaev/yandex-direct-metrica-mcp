@@ -130,16 +130,25 @@ def test_preflight_repairs_reopened_source_issue(monkeypatch) -> None:
         ),
     )
     source_issue = _issue("GEO-32", ["symphony", "issue-type:feature", "release-required"], "Body")
-    source_issue["state"] = {"name": "In Progress"}
-    updated_calls: list[tuple[str, str]] = []
+    source_issue["state"] = {"name": "In Review"}
+    move_calls: list[tuple[str, str, str, str | None]] = []
 
     monkeypatch.setattr(linear_issue, "get_issue", lambda _api_key, issue_id: source_issue if issue_id == "GEO-32" else issue)
-    monkeypatch.setattr(linear_issue, "resolve_state_id", lambda *_args, **_kwargs: "done-state-id")
     monkeypatch.setattr(
-        linear_issue,
-        "update_issue_state",
-        lambda _api_key, issue_id, state_id: updated_calls.append((issue_id, state_id))
-        or {"identifier": issue_id, "state": {"name": "Done"}},
+        followup_preflight.linear_state,
+        "move_issue",
+        lambda issue_id, *, to_state, by, expect=None, client=None: move_calls.append(
+            (issue_id, to_state, by, expect)
+        )
+        or {
+            "ok": True,
+            "issue_id": issue_id,
+            "reason": "allowed",
+            "by": by,
+            "from_state": expect or "unknown",
+            "to_state": to_state,
+            "updated_state": to_state,
+        },
     )
     monkeypatch.setattr(
         linear_issue,
@@ -152,10 +161,34 @@ def test_preflight_repairs_reopened_source_issue(monkeypatch) -> None:
     assert payload["source_issue_state"] == "Done"
     assert payload["source_issue_repair"] == {
         "status": "repaired",
-        "from_state": "In Progress",
+        "from_state": "In Review",
         "state": "Done",
     }
-    assert updated_calls == [("GEO-32", "done-state-id")]
+    assert move_calls == [("GEO-32", "Done", "followup", "In Review")]
+
+
+def test_preflight_blocks_when_source_issue_is_not_repairable(monkeypatch) -> None:
+    issue = _issue(
+        "GEO-33",
+        ["symphony", "issue-type:pr", "release-required", "generated-followup"],
+        linear_issue.followup_description(
+            "pr",
+            _issue("GEO-32", ["symphony", "issue-type:feature", "release-required"], "Body"),
+            Path("/tmp/symphony/GEO-32"),
+        ),
+    )
+    source_issue = _issue("GEO-32", ["symphony", "issue-type:feature", "release-required"], "Body")
+    source_issue["state"] = {"name": "In Progress"}
+
+    monkeypatch.setattr(linear_issue, "get_issue", lambda _api_key, issue_id: source_issue if issue_id == "GEO-32" else issue)
+    monkeypatch.setattr(
+        linear_issue,
+        "verify_followup_source_workspace",
+        lambda stage, source: Path(f"/resolved/{stage}/{source['identifier']}"),
+    )
+
+    with pytest.raises(SystemExit, match="must be `Done` before follow-up preflight"):
+        followup_preflight.preflight(issue, "pr", api_key="token")
 
 
 def test_preflight_release_requires_ghcr_read_token(monkeypatch, tmp_path: Path) -> None:
@@ -221,15 +254,14 @@ def test_main_returns_blocked_json_for_unmerged_release(monkeypatch, capsys, tmp
     monkeypatch.setattr(
         linear_issue,
         "get_issue",
-        lambda _api_key, issue_id: _issue("GEO-15", ["symphony", "issue-type:pr", "release-required"], "Body")
+        lambda _api_key, issue_id: _issue(
+            "GEO-15",
+            ["symphony", "issue-type:pr", "release-required"],
+            "Body",
+        )
+        | {"state": {"name": "Done"}}
         if issue_id == "GEO-15"
         else issue,
-    )
-    monkeypatch.setattr(linear_issue, "resolve_state_id", lambda *_args, **_kwargs: "done-state-id")
-    monkeypatch.setattr(
-        linear_issue,
-        "update_issue_state",
-        lambda _api_key, issue_id, _state_id: {"identifier": issue_id, "state": {"name": "Done"}},
     )
     monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
     monkeypatch.setattr(

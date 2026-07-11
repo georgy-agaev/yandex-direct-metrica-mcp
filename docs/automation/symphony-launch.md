@@ -57,6 +57,14 @@ Reason:
 - if Symphony starts zero-token turns and session jsonl shows `credits.balance = "0"`, the configured `CODEX_HOME` is wrong for autonomous runs;
 - using the app-bundled binary keeps Symphony closer to the same runtime that already exposes `browser@openai-bundled`, `chrome-devtools`, and `playwrigh` in the interactive desktop setup.
 
+The repo launcher now runs a Codex preflight before starting lanes:
+
+- `codex login status` must confirm an active login;
+- `codex doctor --json` must not report `network.provider_reachability = fail`.
+
+If either check fails, `scripts/symphony_control.py start|restart` aborts immediately instead of starting a lane that will spin in place.
+Use `--skip-codex-preflight` only for deliberate debugging.
+
 ## Implementation lane
 
 ```bash

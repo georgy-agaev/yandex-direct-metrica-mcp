@@ -8,6 +8,7 @@ stopped if their pid files are present.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import signal
 import subprocess
@@ -58,6 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workspace-root", type=Path, default=DEFAULT_WORKSPACE_ROOT)
     parser.add_argument("--state-env", type=Path, default=DEFAULT_STATE_ENV)
     parser.add_argument("--codex-home", type=Path)
+    parser.add_argument("--skip-codex-preflight", action="store_true")
     parser.add_argument("--keep-deprecated", action="store_true")
     return parser.parse_args()
 
@@ -137,6 +139,33 @@ def build_env(
     env["SYMPHONY_WORKSPACE_ROOT"] = str(workspace_root)
     env["CODEX_HOME"] = str(resolve_codex_home(codex_home, env))
     return env
+
+
+def run_codex_command(command: list[str], *, env: Mapping[str, str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(command, cwd=cwd, env=dict(env), capture_output=True, text=True)
+
+
+def verify_codex_runtime(repo_root: Path, env: Mapping[str, str]) -> None:
+    login = run_codex_command(["codex", "login", "status"], env=env, cwd=repo_root)
+    login_output = (login.stdout or login.stderr or "").strip()
+    if login.returncode != 0 or "Logged in" not in login_output:
+        raise SystemExit("Codex preflight failed: `codex login status` did not confirm an active login.")
+
+    doctor = run_codex_command(["codex", "doctor", "--json"], env=env, cwd=repo_root)
+    try:
+        report = json.loads(doctor.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        details = (doctor.stdout or doctor.stderr or "").strip()
+        raise SystemExit(f"Codex preflight failed: unable to parse `codex doctor --json`: {details}") from exc
+
+    checks = report.get("checks") or {}
+    auth = (checks.get("auth.credentials") or {}).get("status")
+    reachability = (checks.get("network.provider_reachability") or {}).get("status")
+    reachability_summary = (checks.get("network.provider_reachability") or {}).get("summary") or "provider unreachable"
+    if auth != "ok":
+        raise SystemExit("Codex preflight failed: auth is not healthy in `codex doctor`.")
+    if reachability == "fail":
+        raise SystemExit(f"Codex preflight failed: {reachability_summary}.")
 
 
 def render_workflows(repo_root: Path, symphony_root: Path, workspace_root: Path) -> None:
@@ -233,6 +262,8 @@ def main() -> int:
 
     render_workflows(repo_root, symphony_root, workspace_root)
     env = build_env(symphony_root, workspace_root, state_env, codex_home)
+    if not args.skip_codex_preflight:
+        verify_codex_runtime(repo_root, env)
     for lane in lanes:
         pid = start_lane(repo_root, symphony_root, workspace_root, env, lane)
         print(f"{lane} pid={pid}")
