@@ -93,9 +93,27 @@ def require_release_environment() -> dict[str, str]:
     return {"ghcr_auth": "env:GHCR_READ_TOKEN"}
 
 
-def preflight(issue: dict[str, Any], stage: str) -> dict[str, Any]:
+def ensure_source_issue_done(api_key: str, source_issue_identifier: str) -> dict[str, Any]:
+    source_issue = linear_issue.get_issue(api_key, source_issue_identifier)
+    current_state = source_issue["state"]["name"]
+    if current_state == "Done":
+        return {"status": "already_done", "state": current_state}
+
+    done_state_id = linear_issue.resolve_state_id(api_key, source_issue["team"]["id"], "Done")
+    updated = linear_issue.update_issue_state(api_key, source_issue_identifier, done_state_id)
+    return {
+        "status": "repaired",
+        "from_state": current_state,
+        "state": updated["state"]["name"],
+    }
+
+
+def preflight(issue: dict[str, Any], stage: str, *, api_key: str | None = None) -> dict[str, Any]:
     metadata = require_metadata(issue.get("description") or "")
     source_issue_identifier = metadata["source_issue"]
+    repair = None
+    if api_key:
+        repair = ensure_source_issue_done(api_key, source_issue_identifier)
     resolved_source_workspace = linear_issue.verify_followup_source_workspace(
         stage,
         {"identifier": source_issue_identifier},
@@ -110,6 +128,9 @@ def preflight(issue: dict[str, Any], stage: str) -> dict[str, Any]:
         "source_stage": metadata.get("source_stage"),
         "required_review_outcome": metadata.get("required_review_outcome", "approved"),
     }
+    if repair:
+        result["source_issue_state"] = repair["state"]
+        result["source_issue_repair"] = repair
 
     if stage == "release":
         result.update(require_release_environment())
@@ -145,7 +166,7 @@ def main() -> int:
             raise SystemExit(f"Unsupported issue stage for follow-up preflight: {stage}")
         if args.stage and args.stage != stage:
             raise SystemExit(f"Issue {issue['identifier']} stage mismatch: expected {args.stage}, got {stage}")
-        payload = preflight(issue, stage)
+        payload = preflight(issue, stage, api_key=api_key)
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
     except SystemExit as exc:

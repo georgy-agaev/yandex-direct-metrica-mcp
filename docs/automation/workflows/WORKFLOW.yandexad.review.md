@@ -26,11 +26,11 @@ agent:
   max_concurrent_agents: 1
   max_turns: 3
 codex:
-  command: /Applications/Codex.app/Contents/Resources/codex --model gpt-5.4 --config shell_environment_policy.inherit=all app-server
+  command: codex --model gpt-5.4 --config shell_environment_policy.inherit=all app-server
   approval_policy: never
-  thread_sandbox: workspace-write
+  thread_sandbox: danger-full-access
   turn_sandbox_policy:
-    type: workspaceWrite
+    type: dangerFullAccess
     networkAccess: true
 ---
 You are the review lane for `yandex.ad`.

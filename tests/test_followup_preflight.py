@@ -119,6 +119,45 @@ def test_preflight_release_requires_live_merged_pr(monkeypatch, tmp_path: Path) 
     assert payload["ghcr_auth"] == "env:GHCR_READ_TOKEN"
 
 
+def test_preflight_repairs_reopened_source_issue(monkeypatch) -> None:
+    issue = _issue(
+        "GEO-33",
+        ["symphony", "issue-type:pr", "release-required", "generated-followup"],
+        linear_issue.followup_description(
+            "pr",
+            _issue("GEO-32", ["symphony", "issue-type:feature", "release-required"], "Body"),
+            Path("/tmp/symphony/GEO-32"),
+        ),
+    )
+    source_issue = _issue("GEO-32", ["symphony", "issue-type:feature", "release-required"], "Body")
+    source_issue["state"] = {"name": "In Progress"}
+    updated_calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(linear_issue, "get_issue", lambda _api_key, issue_id: source_issue if issue_id == "GEO-32" else issue)
+    monkeypatch.setattr(linear_issue, "resolve_state_id", lambda *_args, **_kwargs: "done-state-id")
+    monkeypatch.setattr(
+        linear_issue,
+        "update_issue_state",
+        lambda _api_key, issue_id, state_id: updated_calls.append((issue_id, state_id))
+        or {"identifier": issue_id, "state": {"name": "Done"}},
+    )
+    monkeypatch.setattr(
+        linear_issue,
+        "verify_followup_source_workspace",
+        lambda stage, source: Path(f"/resolved/{stage}/{source['identifier']}"),
+    )
+
+    payload = followup_preflight.preflight(issue, "pr", api_key="token")
+
+    assert payload["source_issue_state"] == "Done"
+    assert payload["source_issue_repair"] == {
+        "status": "repaired",
+        "from_state": "In Progress",
+        "state": "Done",
+    }
+    assert updated_calls == [("GEO-32", "done-state-id")]
+
+
 def test_preflight_release_requires_ghcr_read_token(monkeypatch, tmp_path: Path) -> None:
     source_workspace = tmp_path / "GEO-15"
     source_workspace.mkdir()
@@ -179,6 +218,19 @@ def test_main_returns_blocked_json_for_unmerged_release(monkeypatch, capsys, tmp
     monkeypatch.setenv("LINEAR_API_KEY", "token")
     monkeypatch.setenv("GHCR_READ_TOKEN", "token")
     monkeypatch.setattr(followup_preflight, "load_issue", lambda _api_key, _issue_id: issue)
+    monkeypatch.setattr(
+        linear_issue,
+        "get_issue",
+        lambda _api_key, issue_id: _issue("GEO-15", ["symphony", "issue-type:pr", "release-required"], "Body")
+        if issue_id == "GEO-15"
+        else issue,
+    )
+    monkeypatch.setattr(linear_issue, "resolve_state_id", lambda *_args, **_kwargs: "done-state-id")
+    monkeypatch.setattr(
+        linear_issue,
+        "update_issue_state",
+        lambda _api_key, issue_id, _state_id: {"identifier": issue_id, "state": {"name": "Done"}},
+    )
     monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
     monkeypatch.setattr(
         followup_preflight,
