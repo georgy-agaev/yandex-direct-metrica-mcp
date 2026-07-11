@@ -137,15 +137,32 @@ def test_source_workspace_path_uses_env_override(monkeypatch) -> None:
 
 def test_candidate_source_workspaces_checks_legacy_root(monkeypatch, tmp_path) -> None:
     current_root = tmp_path / "current"
+    canonical_root = tmp_path / "canonical"
     legacy_root = tmp_path / "legacy"
     legacy_workspace = legacy_root / "GEO-99"
     legacy_workspace.mkdir(parents=True)
     monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", current_root)
+    monkeypatch.setattr(linear_issue, "CANONICAL_WORKSPACE_ROOT", canonical_root)
     monkeypatch.setattr(linear_issue, "LEGACY_WORKSPACE_ROOT", legacy_root)
 
     candidates = linear_issue.candidate_source_workspaces("GEO-99")
 
     assert candidates == [legacy_workspace.resolve()]
+
+
+def test_candidate_source_workspaces_checks_canonical_root_even_when_env_root_differs(monkeypatch, tmp_path) -> None:
+    current_root = tmp_path / "current"
+    canonical_root = tmp_path / "canonical"
+    legacy_root = tmp_path / "legacy"
+    canonical_workspace = canonical_root / "GEO-100"
+    canonical_workspace.mkdir(parents=True)
+    monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", current_root)
+    monkeypatch.setattr(linear_issue, "CANONICAL_WORKSPACE_ROOT", canonical_root)
+    monkeypatch.setattr(linear_issue, "LEGACY_WORKSPACE_ROOT", legacy_root)
+
+    candidates = linear_issue.candidate_source_workspaces("GEO-100")
+
+    assert candidates == [canonical_workspace.resolve()]
 
 
 def test_find_generated_followup_issue_prefers_stage_and_source_identifier(monkeypatch) -> None:

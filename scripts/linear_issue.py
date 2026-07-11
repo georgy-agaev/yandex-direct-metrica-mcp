@@ -22,9 +22,10 @@ DEFAULT_CONFIG = Path("/Users/georgyagaev/Projects/Symphony_yaad/linear.yandexad
 DEFAULT_SYMPHONY_ROOT = Path(
     os.environ.get("SYMPHONY_ROOT", str(Path.home() / "Projects" / "Symphony_yaad"))
 ).expanduser()
+CANONICAL_WORKSPACE_ROOT = Path("/private/tmp/symphony_yandexad_workspaces")
 LEGACY_WORKSPACE_ROOT = DEFAULT_SYMPHONY_ROOT / "workspaces"
 DEFAULT_WORKSPACE_ROOT = Path(
-    os.environ.get("SYMPHONY_WORKSPACE_ROOT", "/private/tmp/symphony_yandexad_workspaces")
+    os.environ.get("SYMPHONY_WORKSPACE_ROOT", str(CANONICAL_WORKSPACE_ROOT))
 ).expanduser()
 LINEAR_ENDPOINT = "https://api.linear.app/graphql"
 ISSUE_TYPE_PREFIX = "issue-type:"
@@ -47,7 +48,7 @@ def source_workspace_path(issue_identifier: str) -> Path:
 
 
 def workspace_roots_for_lookup() -> list[Path]:
-    roots = [DEFAULT_WORKSPACE_ROOT, LEGACY_WORKSPACE_ROOT]
+    roots = [DEFAULT_WORKSPACE_ROOT, CANONICAL_WORKSPACE_ROOT, LEGACY_WORKSPACE_ROOT]
     deduped: list[Path] = []
     seen: set[str] = set()
     for root in roots:
