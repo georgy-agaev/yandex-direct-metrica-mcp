@@ -4,8 +4,9 @@ All notable changes to this MCP project will be documented in this file.
 
 ## Unreleased
 
-- Automation: hardened `archive_stage_handoff.py` so interrupted merged PR stages can recover `SYMPHONY_STAGE_HANDOFF.md` and `SYMPHONY_WORK_RESULT.md` from local git plus GitHub PR metadata during workspace cleanup, allowing release follow-up creation to continue instead of silently stalling.
+## 2.0.15 - 2026-07-12
 
+- Automation: hardened `archive_stage_handoff.py` so interrupted merged PR stages can recover `SYMPHONY_STAGE_HANDOFF.md` and `SYMPHONY_WORK_RESULT.md` from local git plus GitHub PR metadata during workspace cleanup, allowing release follow-up creation to continue instead of silently stalling.
 ## 2.0.14 - 2026-07-09
 
 - Search API: hardened `search_serp` ad normalization so HTML ads expose advertiser domains, redirect `click_url`, ad `type`, top/bottom `block`, and `ads_count_bottom` while keeping organic extraction stable.
