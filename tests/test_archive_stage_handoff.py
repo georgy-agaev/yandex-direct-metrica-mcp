@@ -70,6 +70,7 @@ def test_recover_pr_stage_artifacts_from_git_and_github(monkeypatch, tmp_path: P
     workspace = tmp_path / "GEO-29"
     workspace.mkdir()
     issue = make_issue(labels=["symphony", "issue-type:pr", "release-required", "generated-followup"])
+    monkeypatch.setattr(archive_stage_handoff, "ROOT", workspace)
 
     def fake_run(command: list[str], cwd: Path, check: bool, capture_output: bool, text: bool):
         assert cwd == workspace
@@ -84,13 +85,22 @@ def test_recover_pr_stage_artifacts_from_git_and_github(monkeypatch, tmp_path: P
             payload = [
                 {
                     "number": 11,
-                    "url": "https://github.com/example/repo/pull/11",
-                    "state": "MERGED",
-                    "mergedAt": "2026-07-12T04:54:18Z",
-                    "mergeCommit": {"oid": "def456"},
+                    "title": "GEO-29: PR stage",
                     "headRefName": "issue/geo-29",
                 }
             ]
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+        if command[:4] == ["gh", "pr", "view", "11"]:
+            payload = {
+                "number": 11,
+                "title": "GEO-29: PR stage",
+                "url": "https://github.com/example/repo/pull/11",
+                "state": "MERGED",
+                "mergedAt": "2026-07-12T04:54:18Z",
+                "mergeCommit": {"oid": "def456"},
+                "headRefName": "issue/geo-29",
+                "headRefOid": "abc123",
+            }
             return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
         raise AssertionError(f"Unexpected command: {command}")
 
@@ -112,6 +122,64 @@ def test_recover_pr_stage_artifacts_from_git_and_github(monkeypatch, tmp_path: P
     assert "merge commit: def456" in stage_handoff
     work_result = (workspace / "SYMPHONY_WORK_RESULT.md").read_text(encoding="utf-8")
     assert "Recovered final PR-stage publication metadata" in work_result
+
+
+def test_recover_pr_stage_artifacts_from_issue_identifier_when_branch_is_gone(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "GEO-29.handoff-2026-07-12T120340Z"
+    workspace.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    issue = make_issue(labels=["symphony", "issue-type:pr", "release-required", "generated-followup"])
+
+    monkeypatch.setattr(archive_stage_handoff, "ROOT", repo)
+
+    def fake_run(command: list[str], cwd: Path, check: bool, capture_output: bool, text: bool):
+        assert check is True
+        assert capture_output is True
+        assert text is True
+        if command == ["git", "branch", "--show-current"]:
+            raise subprocess.CalledProcessError(128, command, stderr="fatal: not a git repository")
+        if command[:4] == ["gh", "pr", "list", "--state"]:
+            assert cwd == repo
+            assert command[4:6] == ["all", "--search"]
+            payload = [
+                {
+                    "number": 16,
+                    "title": "GEO-29: PR: smoke rerun",
+                    "headRefName": "issue/geo-29-pr-smoke",
+                }
+            ]
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+        if command[:4] == ["gh", "pr", "view", "16"]:
+            assert cwd == repo
+            payload = {
+                "number": 16,
+                "title": "GEO-29: PR: smoke rerun",
+                "url": "https://github.com/example/repo/pull/16",
+                "state": "MERGED",
+                "mergedAt": "2026-07-12T12:03:36Z",
+                "mergeCommit": {"oid": "220e22f"},
+                "headRefName": "issue/geo-29-pr-smoke",
+                "headRefOid": "5eb337e",
+            }
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(archive_stage_handoff.subprocess, "run", fake_run)
+
+    payload = archive_stage_handoff.recover_pr_stage_artifacts(workspace, issue)
+
+    assert payload == {
+        "branch": "issue/geo-29-pr-smoke",
+        "commit": "5eb337e",
+        "pr_url": "https://github.com/example/repo/pull/16",
+        "merge_commit": "220e22f",
+        "merged_at": "2026-07-12T12:03:36Z",
+    }
+    assert "issue/geo-29-pr-smoke" in (workspace / "SYMPHONY_STAGE_HANDOFF.md").read_text(encoding="utf-8")
 
 
 def test_reconcile_followup_creates_missing_release_followup(monkeypatch, tmp_path: Path) -> None:
@@ -170,6 +238,7 @@ def test_reconcile_followup_recovers_pr_artifacts_before_creating_release_follow
     workspace.mkdir()
     issue = make_issue(labels=["symphony", "issue-type:pr", "release-required", "generated-followup"])
     created_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(archive_stage_handoff, "ROOT", workspace)
 
     def fake_run(command: list[str], cwd: Path, check: bool, capture_output: bool, text: bool):
         assert cwd == workspace
@@ -181,13 +250,22 @@ def test_reconcile_followup_recovers_pr_artifacts_before_creating_release_follow
             payload = [
                 {
                     "number": 11,
-                    "url": "https://github.com/example/repo/pull/11",
-                    "state": "MERGED",
-                    "mergedAt": "2026-07-12T04:54:18Z",
-                    "mergeCommit": {"oid": "def456"},
+                    "title": "GEO-29: PR stage",
                     "headRefName": "issue/geo-29",
                 }
             ]
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+        if command[:4] == ["gh", "pr", "view", "11"]:
+            payload = {
+                "number": 11,
+                "title": "GEO-29: PR stage",
+                "url": "https://github.com/example/repo/pull/11",
+                "state": "MERGED",
+                "mergedAt": "2026-07-12T04:54:18Z",
+                "mergeCommit": {"oid": "def456"},
+                "headRefName": "issue/geo-29",
+                "headRefOid": "abc123",
+            }
             return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
         raise AssertionError(f"Unexpected command: {command}")
 
@@ -221,6 +299,12 @@ def test_reconcile_followup_recovers_pr_artifacts_before_creating_release_follow
         "url": "https://linear.app/example/GEO-30",
     }
     assert created_calls == [("GEO-29", "release")]
+
+
+def test_load_issue_identifier_from_archive_name(tmp_path: Path) -> None:
+    workspace = tmp_path / "GEO-39.handoff-2026-07-12T120340Z"
+    workspace.mkdir()
+    assert archive_stage_handoff.load_issue_identifier(workspace) == "GEO-39"
 
 
 def test_reconcile_followup_noops_when_followup_already_exists(monkeypatch, tmp_path: Path) -> None:

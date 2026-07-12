@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -37,6 +38,9 @@ def load_issue_identifier(workspace: Path) -> str:
                 return identifier.strip()
         except json.JSONDecodeError:
             pass
+    for marker in (".handoff-latest", ".handoff-"):
+        if marker in workspace.name:
+            return workspace.name.split(marker, 1)[0]
     return workspace.name
 
 
@@ -72,11 +76,11 @@ def existing_artifacts(workspace: Path) -> list[str]:
     return [name for name in ARCHIVE_CANDIDATES if (workspace / name).exists()]
 
 
-def run_capture(workspace: Path, command: list[str]) -> str:
+def run_capture(cwd: Path, command: list[str]) -> str:
     try:
         completed = subprocess.run(
             command,
-            cwd=workspace,
+            cwd=cwd,
             check=True,
             capture_output=True,
             text=True,
@@ -103,10 +107,33 @@ def git_head_commit(workspace: Path) -> str | None:
     return commit or None
 
 
-def github_pr_for_branch(workspace: Path, branch: str) -> dict[str, object] | None:
+def github_repo_context(workspace: Path) -> Path:
+    return workspace if (workspace / ".git").exists() else ROOT
+
+
+def github_pr_view(repo: Path, number: int | str) -> dict[str, object] | None:
     try:
         output = run_capture(
-            workspace,
+            repo,
+            [
+                "gh",
+                "pr",
+                "view",
+                str(number),
+                "--json",
+                "number,title,url,state,mergedAt,mergeCommit,headRefName,headRefOid",
+            ],
+        )
+    except SystemExit:
+        return None
+    payload = json.loads(output or "{}")
+    return payload if isinstance(payload, dict) else None
+
+
+def github_pr_for_branch(repo: Path, branch: str) -> dict[str, object] | None:
+    try:
+        output = run_capture(
+            repo,
             [
                 "gh",
                 "pr",
@@ -116,7 +143,7 @@ def github_pr_for_branch(workspace: Path, branch: str) -> dict[str, object] | No
                 "--head",
                 branch,
                 "--json",
-                "number,url,state,mergedAt,mergeCommit,headRefName",
+                "number,title,url,state,mergedAt,mergeCommit,headRefName",
                 "--limit",
                 "5",
             ],
@@ -130,8 +157,80 @@ def github_pr_for_branch(workspace: Path, branch: str) -> dict[str, object] | No
         if not isinstance(candidate, dict):
             continue
         if candidate.get("headRefName") == branch:
-            return candidate
-    return payload[0] if payload else None
+            number = candidate.get("number")
+            return github_pr_view(repo, number) if number is not None else candidate
+    if not payload:
+        return None
+    candidate = payload[0]
+    number = candidate.get("number") if isinstance(candidate, dict) else None
+    return github_pr_view(repo, number) if number is not None else candidate
+
+
+def github_pr_for_issue_identifier(repo: Path, issue_identifier: str) -> dict[str, object] | None:
+    try:
+        output = run_capture(
+            repo,
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "all",
+                "--search",
+                f"{issue_identifier} in:title",
+                "--json",
+                "number,title,url,state,mergedAt,mergeCommit,headRefName",
+                "--limit",
+                "10",
+            ],
+        )
+    except SystemExit:
+        return None
+    payload = json.loads(output or "[]")
+    if not isinstance(payload, list):
+        return None
+
+    def score(candidate: dict[str, object]) -> tuple[int, int]:
+        title = str(candidate.get("title") or "")
+        prefix_match = int(title.startswith(f"{issue_identifier}:") or title.startswith(f"{issue_identifier} "))
+        merged = int(str(candidate.get("state") or "").strip().lower() == "merged")
+        return (prefix_match, merged)
+
+    candidates = [candidate for candidate in payload if isinstance(candidate, dict)]
+    if not candidates:
+        return None
+    candidates.sort(key=score, reverse=True)
+    number = candidates[0].get("number")
+    return github_pr_view(repo, number) if number is not None else candidates[0]
+
+
+def merged_pr_metadata(workspace: Path, issue_identifier: str) -> dict[str, str] | None:
+    repo = github_repo_context(workspace)
+    branch = git_current_branch(workspace)
+
+    pr = None
+    if branch and branch not in {"main", "master"}:
+        pr = github_pr_for_branch(repo, branch)
+    if pr is None:
+        pr = github_pr_for_issue_identifier(repo, issue_identifier)
+    if not pr:
+        return None
+
+    merged_at = str(pr.get("mergedAt") or "").strip()
+    merge_commit = ((pr.get("mergeCommit") or {}).get("oid") or "").strip()
+    pr_url = str(pr.get("url") or "").strip()
+    pr_state = str(pr.get("state") or "").strip().lower()
+    pr_branch = str(pr.get("headRefName") or "").strip()
+    pr_commit = str(pr.get("headRefOid") or "").strip() or (git_head_commit(workspace) or "")
+    if pr_state != "merged" or not merged_at or not merge_commit or not pr_url or not pr_branch or not pr_commit:
+        return None
+    return {
+        "branch": pr_branch,
+        "commit": pr_commit,
+        "pr_url": pr_url,
+        "merge_commit": merge_commit,
+        "merged_at": merged_at,
+    }
 
 
 def recover_pr_stage_artifacts(workspace: Path, issue: dict[str, object]) -> dict[str, object] | None:
@@ -140,20 +239,8 @@ def recover_pr_stage_artifacts(workspace: Path, issue: dict[str, object]) -> dic
     if (workspace / "SYMPHONY_STAGE_HANDOFF.md").exists() and (workspace / "SYMPHONY_WORK_RESULT.md").exists():
         return None
 
-    branch = git_current_branch(workspace)
-    commit = git_head_commit(workspace)
-    if not branch or not commit:
-        return None
-
-    pr = github_pr_for_branch(workspace, branch)
-    if not pr:
-        return None
-
-    merged_at = str(pr.get("mergedAt") or "").strip()
-    merge_commit = ((pr.get("mergeCommit") or {}).get("oid") or "").strip()
-    pr_url = str(pr.get("url") or "").strip()
-    pr_state = str(pr.get("state") or "").strip().lower()
-    if pr_state != "merged" or not merged_at or not merge_commit or not pr_url:
+    metadata = merged_pr_metadata(workspace, str(issue["identifier"]))
+    if not metadata:
         return None
 
     if not (workspace / "SYMPHONY_STAGE_HANDOFF.md").exists():
@@ -168,12 +255,12 @@ def recover_pr_stage_artifacts(workspace: Path, issue: dict[str, object]) -> dic
                     "",
                     "## Metadata",
                     "",
-                    f"branch: {branch}",
-                    f"commit: {commit}",
-                    f"PR URL: {pr_url}",
+                    f"branch: {metadata['branch']}",
+                    f"commit: {metadata['commit']}",
+                    f"PR URL: {metadata['pr_url']}",
                     "merge status: merged",
-                    f"merge commit: {merge_commit}",
-                    f"merged at: {merged_at}",
+                    f"merge commit: {metadata['merge_commit']}",
+                    f"merged at: {metadata['merged_at']}",
                     "",
                 ]
             ),
@@ -205,13 +292,7 @@ def recover_pr_stage_artifacts(workspace: Path, issue: dict[str, object]) -> dic
             encoding="utf-8",
         )
 
-    return {
-        "branch": branch,
-        "commit": commit,
-        "pr_url": pr_url,
-        "merge_commit": merge_commit,
-        "merged_at": merged_at,
-    }
+    return metadata
 
 
 def synthesized_next_actor(stage: str, issue: dict[str, object]) -> str:
@@ -327,10 +408,30 @@ def reconcile_followup(workspace: Path, issue_identifier: str) -> dict[str, obje
     }
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--workspace", type=Path, help="Workspace or archive directory to reconcile/archive")
+    parser.add_argument("--issue-id", help="Linear issue identifier override, e.g. GEO-39")
+    parser.add_argument(
+        "--reconcile-only",
+        action="store_true",
+        help="Run follow-up recovery without creating a new archive directory",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
-    workspace = Path.cwd().resolve()
-    issue_identifier = load_issue_identifier(workspace)
+    args = parse_args()
+    workspace = (args.workspace or Path.cwd()).resolve()
+    issue_identifier = args.issue_id or load_issue_identifier(workspace)
     followup = reconcile_followup(workspace, issue_identifier)
+    if args.reconcile_only:
+        if followup:
+            print("followup: " + json.dumps(followup, ensure_ascii=False))
+        else:
+            print("followup: null")
+        return 0
+
     root = archive_root(workspace)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     archive_dir = root / f"{issue_identifier}.handoff-{timestamp}"
