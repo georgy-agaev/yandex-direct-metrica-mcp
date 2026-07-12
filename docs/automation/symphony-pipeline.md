@@ -70,6 +70,18 @@ Also define:
 
 These fields explain how strong the current stage validation should be.
 
+### Additional Rule For Parsers And Normalizers
+
+If an issue changes parsing, extraction, normalization, or classification logic:
+
+- acceptance must be fixture-based, not based only on live examples;
+- acceptance must include at least one adversarial case for a plausible-but-wrong output, not only happy-path examples;
+- the issue must prefer unresolved / explicit fallback behavior over fabricated confident-looking data.
+
+Example of the failure class this rule is meant to catch:
+
+- a dotted brand token like `Dr.Head` being emitted as `dr.head` instead of resolving the real host or marking the ad unresolved.
+
 ## Blocked Input Policy
 
 If a stage cannot complete because of missing external credentials, missing operator input, or required manual validation that is impossible in the current environment:

@@ -5,6 +5,7 @@ All notable changes to this MCP project will be documented in this file.
 ## Unreleased
 
 - Docs: recorded Symphony Level B happy-path release evidence for `GEO-38 -> GEO-39 -> GEO-40 -> v2.0.15` and added a session note for the first fully published `feature -> PR -> release` smoke chain.
+- Docs: added hardening drafts for release follow-up durability and `search_serp` ad-domain normalization, and tightened the Symphony pipeline contract so parser/normalizer issues require fixture-based adversarial acceptance.
 
 ## 2.0.15 - 2026-07-12
 
