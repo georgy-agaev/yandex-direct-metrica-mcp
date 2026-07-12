@@ -152,16 +152,29 @@ def reconcile_followup(workspace: Path, issue_identifier: str) -> dict[str, obje
             "url": existing["url"],
         }
 
-    created = linear_issue.ensure_followup_issue(
-        api_key,
-        issue,
-        followup_stage,
-        state="Todo",
-        explicit_title=None,
-        extra_labels=[],
-        create_missing_labels=True,
-        source_workspace_override=workspace,
-    )
+    try:
+        created = linear_issue.ensure_followup_issue(
+            api_key,
+            issue,
+            followup_stage,
+            state="Todo",
+            explicit_title=None,
+            extra_labels=[],
+            create_missing_labels=True,
+            source_workspace_override=workspace,
+        )
+    except SystemExit as exc:
+        message = str(exc)
+        linear_issue.comment_issue(
+            api_key,
+            issue["id"],
+            f"Symphony follow-up recovery blocked for `{followup_stage}`: {message}",
+        )
+        return {
+            "status": "blocked",
+            "stage": followup_stage,
+            "reason": message,
+        }
     return {
         "status": "created",
         "stage": followup_stage,

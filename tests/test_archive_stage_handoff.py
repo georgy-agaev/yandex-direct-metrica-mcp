@@ -138,3 +138,44 @@ def test_reconcile_followup_noops_when_followup_already_exists(monkeypatch, tmp_
         "identifier": "GEO-30",
         "url": "https://linear.app/example/GEO-30",
     }
+
+
+def test_reconcile_followup_records_blocker_when_workspace_cannot_seed_followup(
+    monkeypatch, tmp_path: Path
+) -> None:
+    workspace = tmp_path / "GEO-29"
+    workspace.mkdir()
+    issue = make_issue(labels=["symphony", "issue-type:pr", "release-required", "generated-followup"])
+    comments: list[tuple[str, str]] = []
+
+    monkeypatch.setenv("LINEAR_API_KEY", "token")
+    monkeypatch.setattr(archive_stage_handoff.linear_issue, "get_issue", lambda *_args, **_kwargs: issue)
+    monkeypatch.setattr(
+        archive_stage_handoff.linear_issue,
+        "find_generated_followup_issue",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        archive_stage_handoff.linear_issue,
+        "ensure_followup_issue",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(SystemExit("Missing handoff artifacts in workspace")),
+    )
+    monkeypatch.setattr(
+        archive_stage_handoff.linear_issue,
+        "comment_issue",
+        lambda _api_key, issue_id, body: comments.append((issue_id, body)) or {"id": "comment-1"},
+    )
+
+    payload = archive_stage_handoff.reconcile_followup(workspace, "GEO-29")
+
+    assert payload == {
+        "status": "blocked",
+        "stage": "release",
+        "reason": "Missing handoff artifacts in workspace",
+    }
+    assert comments == [
+        (
+            "issue-id",
+            "Symphony follow-up recovery blocked for `release`: Missing handoff artifacts in workspace",
+        )
+    ]
