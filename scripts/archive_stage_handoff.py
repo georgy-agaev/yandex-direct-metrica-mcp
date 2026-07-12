@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,6 +72,148 @@ def existing_artifacts(workspace: Path) -> list[str]:
     return [name for name in ARCHIVE_CANDIDATES if (workspace / name).exists()]
 
 
+def run_capture(workspace: Path, command: list[str]) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=workspace,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise SystemExit(details) from None
+    return completed.stdout.strip()
+
+
+def git_current_branch(workspace: Path) -> str | None:
+    try:
+        branch = run_capture(workspace, ["git", "branch", "--show-current"]).strip()
+    except SystemExit:
+        return None
+    return branch or None
+
+
+def git_head_commit(workspace: Path) -> str | None:
+    try:
+        commit = run_capture(workspace, ["git", "rev-parse", "HEAD"]).strip()
+    except SystemExit:
+        return None
+    return commit or None
+
+
+def github_pr_for_branch(workspace: Path, branch: str) -> dict[str, object] | None:
+    try:
+        output = run_capture(
+            workspace,
+            [
+                "gh",
+                "pr",
+                "list",
+                "--state",
+                "all",
+                "--head",
+                branch,
+                "--json",
+                "number,url,state,mergedAt,mergeCommit,headRefName",
+                "--limit",
+                "5",
+            ],
+        )
+    except SystemExit:
+        return None
+    payload = json.loads(output or "[]")
+    if not isinstance(payload, list):
+        return None
+    for candidate in payload:
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("headRefName") == branch:
+            return candidate
+    return payload[0] if payload else None
+
+
+def recover_pr_stage_artifacts(workspace: Path, issue: dict[str, object]) -> dict[str, object] | None:
+    if issue_stage(issue) != "pr":
+        return None
+    if (workspace / "SYMPHONY_STAGE_HANDOFF.md").exists() and (workspace / "SYMPHONY_WORK_RESULT.md").exists():
+        return None
+
+    branch = git_current_branch(workspace)
+    commit = git_head_commit(workspace)
+    if not branch or not commit:
+        return None
+
+    pr = github_pr_for_branch(workspace, branch)
+    if not pr:
+        return None
+
+    merged_at = str(pr.get("mergedAt") or "").strip()
+    merge_commit = ((pr.get("mergeCommit") or {}).get("oid") or "").strip()
+    pr_url = str(pr.get("url") or "").strip()
+    pr_state = str(pr.get("state") or "").strip().lower()
+    if pr_state != "merged" or not merged_at or not merge_commit or not pr_url:
+        return None
+
+    if not (workspace / "SYMPHONY_STAGE_HANDOFF.md").exists():
+        (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
+            "\n".join(
+                [
+                    f"# {issue['identifier']} PR Stage Handoff",
+                    "",
+                    "## Summary",
+                    "",
+                    "- Recovered PR-stage metadata during archive reconciliation after an interrupted or incomplete terminal pass.",
+                    "",
+                    "## Metadata",
+                    "",
+                    f"branch: {branch}",
+                    f"commit: {commit}",
+                    f"PR URL: {pr_url}",
+                    "merge status: merged",
+                    f"merge commit: {merge_commit}",
+                    f"merged at: {merged_at}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+    if not (workspace / "SYMPHONY_WORK_RESULT.md").exists():
+        (workspace / "SYMPHONY_WORK_RESULT.md").write_text(
+            "\n".join(
+                [
+                    f"# {issue['identifier']} Work Result",
+                    "",
+                    "## Stage",
+                    "",
+                    "- lane: review",
+                    "- stage: pr",
+                    "",
+                    "## Summary",
+                    "",
+                    f"- {issue['title']}",
+                    "- Recovered final PR-stage publication metadata during archive reconciliation so the release follow-up can continue.",
+                    "",
+                    "## Validation",
+                    "",
+                    "- `archive:recovered-pr-stage-artifacts`",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+    return {
+        "branch": branch,
+        "commit": commit,
+        "pr_url": pr_url,
+        "merge_commit": merge_commit,
+        "merged_at": merged_at,
+    }
+
+
 def synthesized_next_actor(stage: str, issue: dict[str, object]) -> str:
     if stage == "feature":
         return "followup-pr"
@@ -127,6 +270,7 @@ def reconcile_followup(workspace: Path, issue_identifier: str) -> dict[str, obje
         return None
 
     issue = linear_issue.get_issue(api_key, issue_identifier)
+    recover_pr_stage_artifacts(workspace, issue)
     synthesize_review_handoff(workspace, issue)
 
     followup_stage = required_followup_stage(issue)
