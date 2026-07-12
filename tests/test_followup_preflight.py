@@ -76,15 +76,17 @@ def test_preflight_pr_uses_source_issue_metadata(monkeypatch) -> None:
 def test_preflight_release_requires_live_merged_pr(monkeypatch, tmp_path: Path) -> None:
     source_workspace = tmp_path / "GEO-15"
     source_workspace.mkdir()
-    (source_workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
-        "\n".join(
-            [
-                "branch: issue/geo-15",
-                "commit: abc123",
-                "PR URL: https://github.com/example/repo/pull/7",
-                "merge status: merged",
-                "merge commit: def456",
-            ]
+    (source_workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps(
+            {
+                "pr": {
+                    "url": "https://github.com/example/repo/pull/7",
+                    "merge_status": "merged",
+                    "merge_commit": "def456",
+                    "branch": "issue/geo-15",
+                    "commit": "abc123",
+                }
+            }
         ),
         encoding="utf-8",
     )
@@ -99,7 +101,6 @@ def test_preflight_release_requires_live_merged_pr(monkeypatch, tmp_path: Path) 
     )
 
     monkeypatch.setenv("GHCR_READ_TOKEN", "token")
-    monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
     monkeypatch.setattr(
         followup_preflight,
         "github_pr_state",
@@ -117,6 +118,7 @@ def test_preflight_release_requires_live_merged_pr(monkeypatch, tmp_path: Path) 
     assert payload["pr_url"] == "https://github.com/example/repo/pull/7"
     assert payload["github_pr_state"] == "MERGED"
     assert payload["ghcr_auth"] == "env:GHCR_READ_TOKEN"
+    assert "resolved_source_workspace" not in payload
 
 
 def test_preflight_repairs_reopened_source_issue(monkeypatch) -> None:
@@ -194,15 +196,15 @@ def test_preflight_blocks_when_source_issue_is_not_repairable(monkeypatch) -> No
 def test_preflight_release_requires_ghcr_read_token(monkeypatch, tmp_path: Path) -> None:
     source_workspace = tmp_path / "GEO-15"
     source_workspace.mkdir()
-    (source_workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
-        "\n".join(
-            [
-                "branch: issue/geo-15",
-                "commit: abc123",
-                "PR URL: https://github.com/example/repo/pull/7",
-                "merge status: merged",
-                "merge commit: def456",
-            ]
+    (source_workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps(
+            {
+                "pr": {
+                    "url": "https://github.com/example/repo/pull/7",
+                    "merge_status": "merged",
+                    "merge_commit": "def456",
+                }
+            }
         ),
         encoding="utf-8",
     )
@@ -217,7 +219,6 @@ def test_preflight_release_requires_ghcr_read_token(monkeypatch, tmp_path: Path)
     )
 
     monkeypatch.delenv("GHCR_READ_TOKEN", raising=False)
-    monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
 
     with pytest.raises(SystemExit, match="GHCR_READ_TOKEN"):
         followup_preflight.preflight(issue, "release")
@@ -226,15 +227,15 @@ def test_preflight_release_requires_ghcr_read_token(monkeypatch, tmp_path: Path)
 def test_main_returns_blocked_json_for_unmerged_release(monkeypatch, capsys, tmp_path: Path) -> None:
     source_workspace = tmp_path / "GEO-15"
     source_workspace.mkdir()
-    (source_workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
-        "\n".join(
-            [
-                "branch: issue/geo-15",
-                "commit: abc123",
-                "PR URL: https://github.com/example/repo/pull/7",
-                "merge status: merged",
-                "merge commit: def456",
-            ]
+    (source_workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps(
+            {
+                "pr": {
+                    "url": "https://github.com/example/repo/pull/7",
+                    "merge_status": "merged",
+                    "merge_commit": "def456",
+                }
+            }
         ),
         encoding="utf-8",
     )
@@ -263,7 +264,6 @@ def test_main_returns_blocked_json_for_unmerged_release(monkeypatch, capsys, tmp
         if issue_id == "GEO-15"
         else issue,
     )
-    monkeypatch.setattr(linear_issue, "verify_followup_source_workspace", lambda *_args, **_kwargs: source_workspace)
     monkeypatch.setattr(
         followup_preflight,
         "github_pr_state",
@@ -277,3 +277,51 @@ def test_main_returns_blocked_json_for_unmerged_release(monkeypatch, capsys, tmp
     assert exit_code == 2
     assert output["ok"] is False
     assert "requires a merged PR" in output["blocker"]
+
+
+def test_preflight_release_does_not_resolve_source_workspace(monkeypatch, tmp_path: Path) -> None:
+    source_workspace = tmp_path / "GEO-15"
+    source_workspace.mkdir()
+    (source_workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps(
+            {
+                "pr": {
+                    "url": "https://github.com/example/repo/pull/7",
+                    "merge_status": "merged",
+                    "merge_commit": "def456",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    issue = _issue(
+        "GEO-16",
+        ["symphony", "issue-type:release", "release-required"],
+        linear_issue.followup_description(
+            "release",
+            _issue("GEO-15", ["symphony", "issue-type:pr", "release-required"], "Body"),
+            source_workspace,
+        ),
+    )
+    monkeypatch.setenv("GHCR_READ_TOKEN", "token")
+    monkeypatch.setattr(
+        linear_issue,
+        "verify_followup_source_workspace",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("release preflight should not require source workspace resolution")
+        ),
+    )
+    monkeypatch.setattr(
+        followup_preflight,
+        "github_pr_state",
+        lambda _url: {
+            "state": "MERGED",
+            "mergedAt": "2026-07-09T00:00:00Z",
+            "mergeCommit": {"oid": "def456"},
+            "url": "https://github.com/example/repo/pull/7",
+        },
+    )
+
+    payload = followup_preflight.preflight(issue, "release")
+
+    assert payload["ok"] is True

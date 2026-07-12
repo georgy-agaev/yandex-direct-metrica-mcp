@@ -64,17 +64,27 @@ def candidate_source_workspaces(issue_identifier: str) -> list[Path]:
     candidates: list[Path] = []
     seen: set[str] = set()
     for root in workspace_roots_for_lookup():
-        source_workspace = (root / issue_identifier).expanduser()
-        if source_workspace.exists():
-            resolved = source_workspace.resolve()
+        base = (root / issue_identifier).expanduser()
+        explicit = [
+            base,
+            base.with_name(f"{issue_identifier}.handoff-latest"),
+            base.with_name(f"{issue_identifier}.stale-latest"),
+        ]
+        for candidate in explicit:
+            if not candidate.exists() or not candidate.is_dir():
+                continue
+            resolved = candidate.resolve()
             key = str(resolved)
-            if key not in seen:
-                seen.add(key)
-                candidates.append(resolved)
-        parent = source_workspace.parent
-        pattern = f"{source_workspace.name}*"
-        globbed = [candidate.resolve() for candidate in parent.glob(pattern) if candidate.is_dir()]
-        for candidate in sorted(globbed, key=lambda path: path.stat().st_mtime, reverse=True):
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(resolved)
+
+        parent = base.parent
+        patterned: list[Path] = []
+        for suffix in (".handoff-*", ".stale-*"):
+            patterned.extend(candidate.resolve() for candidate in parent.glob(f"{issue_identifier}{suffix}") if candidate.is_dir())
+        for candidate in sorted(patterned, key=lambda path: path.name, reverse=True):
             key = str(candidate)
             if key in seen:
                 continue
@@ -83,26 +93,69 @@ def candidate_source_workspaces(issue_identifier: str) -> list[Path]:
     return candidates
 
 
-def verify_release_source_metadata(source_workspace: Path) -> None:
-    handoff_path = source_workspace / "SYMPHONY_STAGE_HANDOFF.md"
+def read_stage_handoff_metadata(path: Path) -> dict[str, str]:
     try:
-        handoff_text = handoff_path.read_text(encoding="utf-8").lower()
+        text = path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
-        raise SystemExit(f"Missing PR stage handoff metadata: {handoff_path}") from exc
+        raise SystemExit(f"Missing stage handoff metadata: {path}") from exc
 
-    required_fragments = (
-        "pr url",
-        "merge status: merged",
-        "merge commit:",
-    )
-    missing = [fragment for fragment in required_fragments if fragment not in handoff_text]
+    data: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        if ":" not in raw_line:
+            continue
+        key, value = raw_line.split(":", 1)
+        data[key.strip().lower()] = value.strip()
+    return data
+
+
+def read_release_source_metadata(source_workspace: Path) -> dict[str, str]:
+    handoff_json = source_workspace / "SYMPHONY_HANDOFF.json"
+    if handoff_json.exists():
+        payload = json.loads(handoff_json.read_text(encoding="utf-8"))
+        pr = payload.get("pr")
+        if isinstance(pr, dict):
+            metadata = {
+                "pr_url": str(pr.get("url") or "").strip(),
+                "merge_status": str(pr.get("merge_status") or "").strip(),
+                "merge_commit": str(pr.get("merge_commit") or "").strip(),
+                "branch": str(pr.get("branch") or "").strip(),
+                "commit": str(pr.get("commit") or "").strip(),
+            }
+            if metadata["pr_url"] or metadata["merge_status"] or metadata["merge_commit"]:
+                return metadata
+
+    handoff = read_stage_handoff_metadata(source_workspace / "SYMPHONY_STAGE_HANDOFF.md")
+    return {
+        "pr_url": handoff.get("pr url", ""),
+        "merge_status": handoff.get("merge status", ""),
+        "merge_commit": handoff.get("merge commit", ""),
+        "branch": handoff.get("branch", ""),
+        "commit": handoff.get("commit", ""),
+    }
+
+
+def verify_release_source_metadata(source_workspace: Path) -> dict[str, str]:
+    metadata = read_release_source_metadata(source_workspace)
+    missing: list[str] = []
+    if not metadata.get("pr_url"):
+        missing.append("pr.url")
+    if metadata.get("merge_status") != "merged":
+        missing.append("pr.merge_status=merged")
+    if not metadata.get("merge_commit"):
+        missing.append("pr.merge_commit")
     if missing:
         raise SystemExit(
             "PR stage is not publishable for release follow-up; missing metadata: " + ", ".join(missing)
         )
+    return metadata
 
 
-def render_followup_metadata(stage: str, source_issue: dict[str, Any], source_workspace: Path) -> str:
+def render_followup_metadata(
+    stage: str,
+    source_issue: dict[str, Any],
+    source_workspace: Path,
+    release_metadata: dict[str, str] | None = None,
+) -> str:
     release_required = (
         "yes" if RELEASE_REQUIRED_LABEL in {name.strip().lower() for name in issue_label_names(source_issue)} else "no"
     )
@@ -119,6 +172,17 @@ def render_followup_metadata(stage: str, source_issue: dict[str, Any], source_wo
     ]
     if stage == "release":
         lines.append("required_pr_merge: yes")
+        if release_metadata:
+            if release_metadata.get("pr_url"):
+                lines.append(f"pr_url: {release_metadata['pr_url']}")
+            if release_metadata.get("merge_status"):
+                lines.append(f"merge_status: {release_metadata['merge_status']}")
+            if release_metadata.get("merge_commit"):
+                lines.append(f"merge_commit: {release_metadata['merge_commit']}")
+            if release_metadata.get("branch"):
+                lines.append(f"pr_branch: {release_metadata['branch']}")
+            if release_metadata.get("commit"):
+                lines.append(f"pr_head_commit: {release_metadata['commit']}")
     lines.extend(["```", ""])
     return "\n".join(lines)
 
@@ -181,7 +245,6 @@ def review_verify_command(stage: str) -> list[str]:
 
 
 def validate_followup_source_workspace(stage: str, source_issue: dict[str, Any], workspace: Path) -> Path:
-    verifier_name = "review-verify"
     command = review_verify_command(stage)
     candidate_command = command[:]
     workspace_index = candidate_command.index("--workspace") + 1
@@ -201,7 +264,6 @@ def validate_followup_source_workspace(stage: str, source_issue: dict[str, Any],
 
 
 def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -> Path:
-    verifier_name = "review-verify"
     candidates = candidate_source_workspaces(source_issue["identifier"])
     if not candidates:
         raise SystemExit(f"Source workspace not found: {source_workspace_path(source_issue['identifier'])}")
@@ -214,7 +276,7 @@ def verify_followup_source_workspace(stage: str, source_issue: dict[str, Any]) -
             failures.append(f"{resolved}: {exc}")
 
     raise SystemExit(
-        f"Source workspace for {source_issue['identifier']} does not satisfy {verifier_name}: " + " | ".join(failures)
+        f"Source workspace for {source_issue['identifier']} does not satisfy review-verify: " + " | ".join(failures)
     )
 
 
@@ -619,6 +681,7 @@ def followup_description(stage: str, source_issue: dict[str, Any], source_worksp
     source_workspace_text = str(workspace_path)
     source_type = classify_issue_type(issue_label_names(source_issue))
     source_label_list = ", ".join(issue_label_names(source_issue)) or "none"
+    release_metadata = verify_release_source_metadata(workspace_path) if stage == "release" else None
     common = [
         f"# {stage.upper()} follow-up for {source_issue['identifier']}",
         "",
@@ -634,7 +697,7 @@ def followup_description(stage: str, source_issue: dict[str, Any], source_worksp
         f"- Source labels: {source_label_list}",
         f"- Source workspace: `{source_workspace_text}`",
         "",
-        render_followup_metadata(stage, source_issue, workspace_path),
+        render_followup_metadata(stage, source_issue, workspace_path, release_metadata),
         "## Required Handoff Artifacts",
         "- `SYMPHONY_WORK_RESULT.md` from the source workspace is mandatory.",
         "- `SYMPHONY_HANDOFF.json` from the source workspace is mandatory.",
@@ -742,8 +805,9 @@ def followup_description(stage: str, source_issue: dict[str, Any], source_worksp
                 "",
                 "## Source Handoff Requirements",
                 f"- Required path: read `{source_workspace_text}/SYMPHONY_HANDOFF.json` first for stage, transition, and cycle metadata.",
-                f"- Required path: read `{source_workspace_text}/SYMPHONY_STAGE_HANDOFF.md` for the approved branch, commit, PR URL, merge status, merge commit, and release notes context.",
-                "- The PR-stage handoff must explicitly show `merge status: merged` and `merge commit:` before this release issue may proceed.",
+                "- The release preflight metadata block in this issue is the machine-readable source of PR URL and merge metadata.",
+                f"- Required path for human context: read `{source_workspace_text}/SYMPHONY_STAGE_HANDOFF.md` for branch and release notes context.",
+                "- The source PR handoff must provide machine-readable `pr.url`, `pr.merge_status`, and `pr.merge_commit` metadata before this release issue may proceed.",
                 "- If the source workspace does not satisfy the PR handoff contract, do not continue this release stage. Return the source issue to implementation or operator handling first.",
             ]
         )

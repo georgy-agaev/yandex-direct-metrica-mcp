@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from scripts import linear_issue
@@ -70,11 +72,37 @@ def test_followup_description_for_pr_contains_pr_contract() -> None:
     assert "Use `n/a`. Release publication is owned by a separate release follow-up issue." in body
 
 
-def test_followup_description_for_release_contains_release_contract() -> None:
+def test_followup_description_for_release_contains_release_contract(tmp_path) -> None:
+    workspace = tmp_path / "GEO-8"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "issue": {"identifier": "GEO-8", "title": "PR issue"},
+                "stage": {"type": "pr", "role": "review"},
+                "transition": {"from_state": "In Review", "to_state": "Done", "status": "approved"},
+                "cycle": {"iteration": 1, "max_iterations": 3},
+                "summary": "approved",
+                "artifacts": ["SYMPHONY_WORK_RESULT.md", "SYMPHONY_HANDOFF.json", "SYMPHONY_STAGE_HANDOFF.md"],
+                "validation": {"passed": ["pytest -q"]},
+                "next_actor": "followup-release",
+                "blockers": [],
+                "pr": {
+                    "url": "https://github.com/example/repo/pull/8",
+                    "merge_status": "merged",
+                    "merge_commit": "def456",
+                    "branch": "issue/geo-8-pr-smoke",
+                    "commit": "abc123",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     body = linear_issue.followup_description(
         "release",
         _issue_with_identifier("GEO-8", ["symphony", "issue-type:pr", "release-required"]),
-        linear_issue.Path("/tmp/symphony/GEO-8"),
+        workspace,
     )
     assert "## Execution Profile" in body
     assert "- Issue Class: release" in body
@@ -82,13 +110,15 @@ def test_followup_description_for_release_contains_release_contract() -> None:
     assert "## Symphony Preflight Metadata" in body
     assert "source_issue: GEO-8" in body
     assert "required_pr_merge: yes" in body
+    assert "pr_url: https://github.com/example/repo/pull/8" in body
+    assert "merge_status: merged" in body
+    assert "merge_commit: def456" in body
     assert "SYMPHONY_HANDOFF.json" in body
     assert "SYMPHONY_STAGE_HANDOFF.md" in body
     assert "python scripts/release_followup.py --issue-id {{ issue.identifier }}" in body
     assert "next patch version from `pyproject.toml`" in body
     assert "GitHub Release exists." in body
     assert "The source PR is already merged before release publication starts." in body
-    assert "merge status: merged" in body
     assert "## Release Validation" in body
     assert "python scripts/live_validation.py --suite direct,metrica,wordstat,search" in body
     assert "No new feature work." in body
@@ -97,16 +127,30 @@ def test_followup_description_for_release_contains_release_contract() -> None:
 def test_verify_release_source_metadata_requires_merged_pr(tmp_path) -> None:
     workspace = tmp_path / "GEO-15"
     workspace.mkdir()
-    (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
-        "branch: issue/geo-15\ncommit: abc123\nPR URL: https://example.test/pr/7\nmerge status: open\n",
+    (workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps({"pr": {"url": "https://github.com/example/repo/pull/7", "merge_status": "open"}}),
         encoding="utf-8",
     )
 
-    with pytest.raises(SystemExit, match="missing metadata: merge status: merged, merge commit:"):
+    with pytest.raises(SystemExit, match="missing metadata: pr.merge_status=merged, pr.merge_commit"):
         linear_issue.verify_release_source_metadata(workspace)
 
 
 def test_verify_release_source_metadata_accepts_merged_pr(tmp_path) -> None:
+    workspace = tmp_path / "GEO-15"
+    workspace.mkdir()
+    (workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps({"pr": {"url": "https://github.com/example/repo/pull/7", "merge_status": "merged", "merge_commit": "def456"}}),
+        encoding="utf-8",
+    )
+
+    metadata = linear_issue.verify_release_source_metadata(workspace)
+    assert metadata["pr_url"] == "https://github.com/example/repo/pull/7"
+    assert metadata["merge_status"] == "merged"
+    assert metadata["merge_commit"] == "def456"
+
+
+def test_verify_release_source_metadata_falls_back_to_stage_handoff_markdown(tmp_path) -> None:
     workspace = tmp_path / "GEO-15"
     workspace.mkdir()
     (workspace / "SYMPHONY_STAGE_HANDOFF.md").write_text(
@@ -114,7 +158,7 @@ def test_verify_release_source_metadata_accepts_merged_pr(tmp_path) -> None:
             [
                 "branch: issue/geo-15",
                 "commit: abc123",
-                "PR URL: https://example.test/pr/7",
+                "PR URL: https://github.com/example/repo/pull/7",
                 "merge status: merged",
                 "merge commit: def456",
             ]
@@ -122,7 +166,8 @@ def test_verify_release_source_metadata_accepts_merged_pr(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    linear_issue.verify_release_source_metadata(workspace)
+    metadata = linear_issue.verify_release_source_metadata(workspace)
+    assert metadata["pr_url"] == "https://github.com/example/repo/pull/7"
 
 
 def test_source_workspace_path_uses_env_override(monkeypatch) -> None:
@@ -163,6 +208,24 @@ def test_candidate_source_workspaces_checks_canonical_root_even_when_env_root_di
     candidates = linear_issue.candidate_source_workspaces("GEO-100")
 
     assert candidates == [canonical_workspace.resolve()]
+
+
+def test_candidate_source_workspaces_prefers_handoff_latest_over_older_archives(monkeypatch, tmp_path) -> None:
+    root = tmp_path / "workspaces"
+    handoff_latest = root / "GEO-101.handoff-latest"
+    older = root / "GEO-101.handoff-2026-07-01T120000Z"
+    newer = root / "GEO-101.handoff-2026-07-02T120000Z"
+    handoff_latest.mkdir(parents=True)
+    older.mkdir(parents=True)
+    newer.mkdir(parents=True)
+    monkeypatch.setattr(linear_issue, "DEFAULT_WORKSPACE_ROOT", root)
+    monkeypatch.setattr(linear_issue, "CANONICAL_WORKSPACE_ROOT", root)
+    monkeypatch.setattr(linear_issue, "LEGACY_WORKSPACE_ROOT", root)
+
+    candidates = linear_issue.candidate_source_workspaces("GEO-101")
+
+    assert candidates[0] == handoff_latest.resolve()
+    assert candidates[1:] == [newer.resolve(), older.resolve()]
 
 
 def test_find_generated_followup_issue_prefers_stage_and_source_identifier(monkeypatch) -> None:
@@ -384,12 +447,24 @@ def test_verify_followup_source_workspace_prefers_valid_archived_candidate(monke
     )
 
     assert resolved == archived.resolve()
-    assert seen == [str(archived.resolve())]
+    assert seen == [str(stale.resolve()), str(archived.resolve())]
 
 
 def test_build_followup_input_uses_workspace_override(monkeypatch, tmp_path) -> None:
     workspace = tmp_path / "GEO-12"
     workspace.mkdir()
+    (workspace / "SYMPHONY_HANDOFF.json").write_text(
+        json.dumps(
+            {
+                "pr": {
+                    "url": "https://github.com/example/repo/pull/12",
+                    "merge_status": "merged",
+                    "merge_commit": "def456",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     seen: list[Path] = []
 
     monkeypatch.setattr(

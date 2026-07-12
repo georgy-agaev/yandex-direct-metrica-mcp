@@ -486,6 +486,13 @@ def test_review_finish_routes_release_required_pr_to_followup_release(
     }
     handoff = json.loads((workspace / "SYMPHONY_HANDOFF.json").read_text(encoding="utf-8"))
     assert handoff["next_actor"] == "followup-release"
+    assert handoff["pr"] == {
+        "pr_url": "https://example.test/pr/1",
+        "merge_status": "",
+        "merge_commit": "",
+        "branch": "issue/geo-18",
+        "commit": "abc123",
+    }
     assert followup_calls == [("GEO-18", "pr", True)]
     assert calls == [("GEO-18", "Done", "review", "In Review")]
 
@@ -540,6 +547,7 @@ def test_review_finish_infers_release_required_from_labels(
     assert payload["followup_issue"]["stage"] == "release"
     handoff = json.loads((workspace / "SYMPHONY_HANDOFF.json").read_text(encoding="utf-8"))
     assert handoff["next_actor"] == "followup-release"
+    assert handoff["pr"]["branch"] == "issue/geo-18"
     assert followup_calls == [("GEO-18", "pr", True)]
     assert calls == [("GEO-18", "Done", "review", "In Review")]
 

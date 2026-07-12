@@ -18,9 +18,6 @@ if str(ROOT) not in sys.path:
 from scripts import linear_issue, linear_state
 
 
-PR_URL_RE = re.compile(r"https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)")
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--issue-id", required=True, help="Linear issue identifier, for example GEO-15")
@@ -28,23 +25,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def stage_handoff_metadata(path: Path) -> dict[str, str]:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except FileNotFoundError as exc:
-        raise SystemExit(f"Missing stage handoff metadata: {path}") from exc
-
-    data: dict[str, str] = {}
-    for raw_line in text.splitlines():
-        if ":" not in raw_line:
-            continue
-        key, value = raw_line.split(":", 1)
-        data[key.strip().lower()] = value.strip()
-    return data
-
-
 def parse_github_pr_url(url: str) -> dict[str, str]:
-    match = PR_URL_RE.fullmatch(url.strip())
+    match = re.fullmatch(r"https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)", url.strip())
     if not match:
         raise SystemExit(f"Unsupported GitHub PR URL: {url}")
     return match.groupdict()
@@ -76,7 +58,7 @@ def issue_stage(issue: dict[str, Any]) -> str:
 
 def require_metadata(description: str) -> dict[str, str]:
     metadata = linear_issue.parse_followup_metadata(description)
-    required = ("source_issue", "source_workspace")
+    required = ("source_issue",)
     missing = [key for key in required if not metadata.get(key)]
     if missing:
         raise SystemExit("Follow-up issue is missing preflight metadata: " + ", ".join(missing))
@@ -129,17 +111,12 @@ def preflight(issue: dict[str, Any], stage: str, *, api_key: str | None = None) 
     repair = None
     if api_key:
         repair = ensure_source_issue_done(api_key, source_issue_identifier)
-    resolved_source_workspace = linear_issue.verify_followup_source_workspace(
-        stage,
-        {"identifier": source_issue_identifier},
-    )
     result: dict[str, Any] = {
         "ok": True,
         "issue": issue["identifier"],
         "stage": stage,
         "source_issue": source_issue_identifier,
-        "declared_source_workspace": metadata["source_workspace"],
-        "resolved_source_workspace": str(resolved_source_workspace),
+        "declared_source_workspace": metadata.get("source_workspace"),
         "source_stage": metadata.get("source_stage"),
         "required_review_outcome": metadata.get("required_review_outcome", "approved"),
     }
@@ -149,18 +126,28 @@ def preflight(issue: dict[str, Any], stage: str, *, api_key: str | None = None) 
 
     if stage == "release":
         result.update(require_release_environment())
-        handoff = stage_handoff_metadata(resolved_source_workspace / "SYMPHONY_STAGE_HANDOFF.md")
-        pr_url = handoff.get("pr url")
+        pr_url = metadata.get("pr_url")
         if not pr_url:
-            raise SystemExit("Release preflight requires `PR URL:` in source PR handoff metadata")
+            raise SystemExit("Release preflight requires `pr_url` in follow-up metadata")
+        if metadata.get("merge_status") != "merged":
+            raise SystemExit("Release preflight requires `merge_status: merged` in follow-up metadata")
+        merge_commit = metadata.get("merge_commit")
+        if not merge_commit:
+            raise SystemExit("Release preflight requires `merge_commit` in follow-up metadata")
         github_state = github_pr_state(pr_url)
         if github_state.get("state") != "MERGED" or not github_state.get("mergedAt"):
             raise SystemExit(f"Release preflight requires a merged PR; got state={github_state.get('state')}")
         result["pr_url"] = pr_url
-        result["merge_status"] = handoff.get("merge status")
-        result["merge_commit"] = handoff.get("merge commit")
+        result["merge_status"] = metadata.get("merge_status")
+        result["merge_commit"] = merge_commit
         result["github_pr_state"] = github_state["state"]
         result["github_merged_at"] = github_state.get("mergedAt")
+    else:
+        resolved_source_workspace = linear_issue.verify_followup_source_workspace(
+            stage,
+            {"identifier": source_issue_identifier},
+        )
+        result["resolved_source_workspace"] = str(resolved_source_workspace)
     return result
 
 

@@ -416,6 +416,8 @@ def review_finish(args: argparse.Namespace) -> dict[str, Any]:
         "next_actor": next_actor,
         "blockers": blockers,
     }
+    if stage == "pr" and args.outcome == "approved":
+        handoff["pr"] = linear_issue.read_release_source_metadata(workspace)
     write_handoff(workspace / DEFAULT_HANDOFF, handoff)
     stage_handoff.verify_review(workspace, stage, args.outcome)
     followup_issue = None
