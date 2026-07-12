@@ -186,7 +186,47 @@ def test_normalize_search_html_classifies_ad_types_and_blocks() -> None:
     assert [ad["block"] for ad in out["ads"]] == ["top", "bottom", "bottom", "bottom"]
     assert out["ads_count_top"] == 1
     assert out["ads_count_bottom"] == 1
+    assert out["ads"][1]["domain"] == ""
     assert out["ads"][2]["domain"] == "native.example.ru"
+
+
+def test_normalize_search_html_rejects_confident_wrong_dotted_brand_tokens() -> None:
+    raw_html = """
+    <html><body>
+      <li class="serp-item serp-adv" data-cid="ad-1">
+        <span>Реклама</span>
+        <a href="https://yabs.yandex.ru/count/abc?url=https%3A%2F%2Fdoctorhead.ru%2Fcatalog">
+          <h2>Покупайте товары в Dr.Head</h2>
+        </a>
+        <span>doctorhead.ru</span>
+        <div>Реальный домен doctorhead.ru, а бренд пишется как Dr.Head</div>
+      </li>
+    </body></html>
+    """
+
+    out = normalize_search_serp(raw_html, response_format="FORMAT_HTML")
+
+    assert out["ads"][0]["domain"] == "doctorhead.ru"
+    assert out["ads"][0]["domain"] != "dr.head"
+
+
+def test_normalize_search_html_keeps_yabs_unresolved_when_no_valid_advertiser_domain_exists() -> None:
+    raw_html = """
+    <html><body>
+      <li class="serp-item serp-adv" data-cid="ad-1">
+        <span>Реклама</span>
+        <a href="https://yabs.yandex.ru/count/abc?foo=bar">
+          <h2>Неизвестный рекламодатель</h2>
+        </a>
+        <div>Переход через yabs без видимого домена рекламодателя</div>
+      </li>
+    </body></html>
+    """
+
+    out = normalize_search_serp(raw_html, response_format="FORMAT_HTML")
+
+    assert out["ads"][0]["domain"] == ""
+    assert out["ads"][0]["click_url"].startswith("https://yabs.yandex.ru/")
 
 
 def test_search_serp_server_helper_omits_raw_by_default(monkeypatch) -> None:

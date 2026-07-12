@@ -215,16 +215,70 @@ _VISIBLE_DOMAIN_RE = re.compile(
     re.IGNORECASE,
 )
 
+_COMMON_PUBLIC_SUFFIXES = {
+    "ai",
+    "app",
+    "biz",
+    "cc",
+    "cloud",
+    "co",
+    "com",
+    "dev",
+    "eu",
+    "group",
+    "info",
+    "io",
+    "me",
+    "mobi",
+    "name",
+    "net",
+    "online",
+    "org",
+    "pro",
+    "ru",
+    "shop",
+    "site",
+    "store",
+    "su",
+    "tech",
+    "tv",
+    "xn--p1ai",
+}
+_MULTIPART_PUBLIC_SUFFIXES = {
+    "co.uk",
+    "com.au",
+    "com.tr",
+    "co.il",
+}
+
 
 def _is_yandex_ad_host(domain: str) -> bool:
     return domain in {"yabs.yandex.ru", "an.yandex.ru", "yandex.ru"}
 
 
+def _is_valid_registrable_domain(domain: str) -> bool:
+    normalized = domain.strip().lower().strip(".").removeprefix("www.")
+    if not normalized or _is_yandex_ad_host(normalized):
+        return False
+    labels = normalized.split(".")
+    if len(labels) < 2:
+        return False
+    label_re = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+    if any(not label_re.fullmatch(label) for label in labels):
+        return False
+    suffix = ".".join(labels[-2:]) if ".".join(labels[-2:]) in _MULTIPART_PUBLIC_SUFFIXES else labels[-1]
+    return suffix in _COMMON_PUBLIC_SUFFIXES or suffix.startswith("xn--")
+
+
+def _validated_domain_from_url(url: str) -> str:
+    domain = _domain_from_url(url)
+    return domain if _is_valid_registrable_domain(domain) else ""
+
+
 def _domain_from_visible_text(text: str) -> str:
     for match in _VISIBLE_DOMAIN_RE.finditer(text):
         domain = match.group(1).lower().removeprefix("www.")
-        suffix = domain.rsplit(".", 1)[-1]
-        if not suffix.isdigit() and not _is_yandex_ad_host(domain):
+        if _is_valid_registrable_domain(domain):
             return domain
     return ""
 
@@ -456,12 +510,17 @@ def parse_search_html(raw_html: str) -> dict[str, Any]:
         title = block.title
         if not href or not title:
             continue
+        ad_type = block.ad_type() if block.is_ad() else ""
         landing_url = _landing_url_from_redirect(href)
+        landing_domain = _validated_domain_from_url(landing_url)
+        href_domain = _validated_domain_from_url(href)
         visible_domain = _domain_from_visible_text(block.text)
-        domain = visible_domain or _domain_from_url(landing_url) or _domain_from_url(href)
-        if not domain:
-            continue
-        key = (domain, title)
+        if ad_type == "product_gallery":
+            domain = ""
+        else:
+            domain = landing_domain or href_domain or visible_domain
+        identity_domain = domain or landing_domain or href_domain or href or title
+        key = (identity_domain, title)
         if key in seen:
             continue
         seen.add(key)
@@ -472,7 +531,6 @@ def parse_search_html(raw_html: str) -> dict[str, Any]:
             "snippet": block.text,
         }
         if block.is_ad():
-            ad_type = block.ad_type()
             item["type"] = ad_type
             if href != item["url"] or _is_yandex_ad_host(_domain_from_url(href)):
                 item["click_url"] = href
