@@ -110,6 +110,15 @@ def test_classify_pull_failure_forbidden() -> None:
     assert "GHCR_READ_TOKEN" in failure.details
 
 
+def test_classify_pull_failure_denied_phrase_maps_to_forbidden() -> None:
+    failure = sync_local_docker_release.classify_pull_failure(
+        "ghcr.io/example/pro:pro-v2.0.14",
+        "denied: requested access to the resource is denied",
+    )
+    assert failure.status == "forbidden"
+    assert "read:packages" in failure.details
+
+
 def test_classify_pull_failure_not_found() -> None:
     failure = sync_local_docker_release.classify_pull_failure(
         "ghcr.io/example/pro:pro-v2.0.14",
