@@ -4,6 +4,8 @@ All notable changes to this MCP project will be documented in this file.
 
 ## Unreleased
 
+- Docs: recorded Symphony Level B happy-path release evidence for `GEO-38 -> GEO-39 -> GEO-40 -> v2.0.15` and added a session note for the first fully published `feature -> PR -> release` smoke chain.
+
 ## 2.0.15 - 2026-07-12
 
 - Automation: hardened `archive_stage_handoff.py` so interrupted merged PR stages can recover `SYMPHONY_STAGE_HANDOFF.md` and `SYMPHONY_WORK_RESULT.md` from local git plus GitHub PR metadata during workspace cleanup, allowing release follow-up creation to continue instead of silently stalling.
