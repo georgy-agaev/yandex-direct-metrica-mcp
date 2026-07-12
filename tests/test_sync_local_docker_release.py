@@ -58,6 +58,49 @@ def test_main_public_only_refreshes_public_aliases_without_ghcr_login(
     ]
 
 
+def test_main_include_pro_refreshes_public_and_pro_aliases_after_ghcr_login(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, tuple[str, ...]]] = []
+
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "parse_args",
+        lambda: argparse.Namespace(version="2.0.13", owner="georgy-agaev", include_pro=True),
+    )
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "ghcr_login_if_possible",
+        lambda owner: calls.append(("login", (owner,))) or True,
+    )
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "pull_remote_image",
+        lambda remote: calls.append(("pull", (remote,))),
+    )
+    monkeypatch.setattr(
+        sync_local_docker_release,
+        "run",
+        lambda *args: calls.append(("run", tuple(args))),
+    )
+
+    assert sync_local_docker_release.main() == 0
+
+    public_remote = "ghcr.io/georgy-agaev/yandex-direct-metrica-mcp:v2.0.13"
+    pro_remote = "ghcr.io/georgy-agaev/yandex-direct-metrica-mcp-pro:pro-v2.0.13"
+    assert calls == [
+        ("login", ("georgy-agaev",)),
+        ("pull", (public_remote,)),
+        ("run", ("docker", "tag", public_remote, "yandex-direct-metrica-mcp:latest")),
+        ("run", ("docker", "tag", public_remote, "ghcr.io/georgy-agaev/yandex-direct-metrica-mcp:latest")),
+        ("run", ("docker", "tag", public_remote, "docker.io/georgy-agaev/yandex-direct-metrica-mcp:latest")),
+        ("pull", (pro_remote,)),
+        ("run", ("docker", "tag", pro_remote, "yandex-direct-metrica-mcp-pro:latest")),
+        ("run", ("docker", "tag", pro_remote, "ghcr.io/georgy-agaev/yandex-direct-metrica-mcp-pro:latest")),
+        ("run", ("docker", "tag", pro_remote, "docker.io/georgy-agaev/yandex-direct-metrica-mcp-pro:latest")),
+    ]
+
+
 def test_classify_pull_failure_forbidden() -> None:
     failure = sync_local_docker_release.classify_pull_failure(
         "ghcr.io/example/pro:pro-v2.0.14",
