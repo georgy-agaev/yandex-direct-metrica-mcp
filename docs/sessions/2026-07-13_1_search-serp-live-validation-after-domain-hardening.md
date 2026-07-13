@@ -2,8 +2,8 @@
 
 ## Completed
 
-- Ran live `search_serp` validation against the configured Yandex Search API credentials from
-  `/Users/georgyagaev/mcp/state/yandex.ad/.env`.
+- Ran live `search_serp` validation against the configured external Yandex Search API credentials
+  loaded from the operator-managed state `.env`.
 - Verified bounded smoke access for the three Marketing control queries plus the earlier `jabra evolve2 75 купить` control query.
 - Confirmed the post-fix contract on live data:
   - `dr.head` no longer appears as a resolved advertiser domain;

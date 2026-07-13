@@ -4,10 +4,14 @@ All notable changes to this MCP project will be documented in this file.
 
 ## Unreleased
 
-- Search API: hardened `search_serp` ad-domain normalization to prefer validated URL-derived advertiser hosts, keep `product_gallery` ad domains unresolved, and block confident-wrong dotted brand tokens such as `dr.head`.
-- Automation: hardened release follow-up metadata flow so PR-stage review writes structured merge metadata into `SYMPHONY_HANDOFF.json`, release preflight reads machine metadata from the follow-up issue contract, and release follow-up lookup no longer depends on mtime-based workspace selection.
 - Docs: recorded Symphony Level B happy-path release evidence for `GEO-38 -> GEO-39 -> GEO-40 -> v2.0.15` and added a session note for the first fully published `feature -> PR -> release` smoke chain.
 - Docs: added hardening drafts for release follow-up durability and `search_serp` ad-domain normalization, and tightened the Symphony pipeline contract so parser/normalizer issues require fixture-based adversarial acceptance.
+
+## 2.0.16 - 2026-07-13
+
+- Search API: hardened `search_serp` ad-domain normalization to prefer validated URL-derived advertiser hosts, keep `product_gallery` ad domains unresolved, and block confident-wrong dotted brand tokens such as `dr.head`.
+- Search API: verified on live Yandex Search API queries that `dr.head` no longer appears, Yandex redirect hosts no longer leak into `ads[].domain`, and unresolved ads now fail closed instead of emitting false competitor domains.
+- Automation: hardened release follow-up metadata flow so PR-stage review writes structured merge metadata into `SYMPHONY_HANDOFF.json`, release preflight reads machine metadata from the follow-up issue contract, and release follow-up lookup no longer depends on mtime-based workspace selection.
 
 ## 2.0.15 - 2026-07-12
 
