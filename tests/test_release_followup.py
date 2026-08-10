@@ -87,6 +87,21 @@ def test_write_release_notes_keeps_existing_file_idempotent(tmp_path: Path, monk
     assert path.read_text(encoding="utf-8") == "# v2.0.14\n\nExisting release notes.\n"
 
 
+def test_remove_stale_artifacts_preserves_stage_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(release_followup, "ROOT", tmp_path)
+    for name in release_followup.STALE_ARTIFACTS:
+        (tmp_path / name).write_text("stale\n", encoding="utf-8")
+    stage_handoff = tmp_path / "SYMPHONY_STAGE_HANDOFF.md"
+    stage_handoff.write_text("PR-stage evidence\n", encoding="utf-8")
+
+    release_followup.remove_stale_artifacts()
+
+    assert all(not (tmp_path / name).exists() for name in release_followup.STALE_ARTIFACTS)
+    assert stage_handoff.read_text(encoding="utf-8") == "PR-stage evidence\n"
+
+
 def test_ensure_repo_ready_for_release_allows_only_release_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(release_followup, "remove_stale_artifacts", lambda: None)
     monkeypatch.setattr(
