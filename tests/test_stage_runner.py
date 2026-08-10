@@ -117,6 +117,7 @@ def test_resolve_stage_uses_labels_when_stage_missing() -> None:
 
 
 def test_resolve_stage_extracts_issue_type_from_compact_label_text() -> None:
+    # Guards launcher-provided label strings that arrive without separators.
     assert stage.resolve_stage(Namespace(stage=None, labels="symphonyissue-type:featureautomation")) == "feature"
     assert stage.resolve_stage(Namespace(stage=None, labels="symphonyissue-type:prautomation")) == "pr"
     assert stage.resolve_stage(Namespace(stage=None, labels="symphonyissue-type:releaseautomation")) == "release"
