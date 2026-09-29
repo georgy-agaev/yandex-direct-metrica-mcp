@@ -2586,6 +2586,27 @@ def _pending_write_pop(ctx: AppContext, *, confirm_token: str) -> PendingWriteAc
         return ctx.pending_writes.pop(confirm_token, None)
 
 
+def _unwrap_confirmed_output(out: Any) -> tuple[Any, bool]:
+    """Turn the executed write's response into (structured output, is_error).
+
+    Successful tools return `(content, structured)`; errors and some HF tools return
+    a bare `list[TextContent]`, which is not JSON-serializable as is.
+    """
+    if isinstance(out, tuple) and len(out) == 2:
+        return out[1], False
+    parsed: list[Any] = []
+    for item in out if isinstance(out, list) else [out]:
+        text = getattr(item, "text", item)
+        try:
+            parsed.append(json.loads(text) if isinstance(text, str) else text)
+        except ValueError:
+            parsed.append(text)
+    is_error = any(
+        isinstance(p, dict) and ("error" in p or p.get("status") == "error") for p in parsed
+    )
+    return (parsed[0] if len(parsed) == 1 else parsed), is_error
+
+
 def _two_phase_planned_payload(
     tool: str, *, confirm_token: str, args: dict[str, Any], ttl_seconds: int
 ) -> dict[str, Any]:
@@ -7174,15 +7195,16 @@ async def call_tool(name: str, arguments: dict[str, Any] | None = None) -> Any:
             finally:
                 _TWO_PHASE_BYPASS.reset(token)
 
-            structured: Any = None
-            if isinstance(out, tuple) and len(out) == 2:
-                structured = out[1]
+            structured, is_error = _unwrap_confirmed_output(out)
+            if is_error:
+                # The write itself failed: hand back its error (Direct API text) as is.
+                return out
             payload = {
                 "status": "ok",
                 "result": {
                     "executed_tool": action.tool,
                     "executed_args_keys": sorted([str(k) for k in (action.args or {}).keys()]),
-                    "output": structured if structured is not None else {"raw": out},
+                    "output": structured,
                 },
             }
             return _ok_result(ctx, name, payload)
